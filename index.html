@@ -2134,7 +2134,7 @@ async function publishSignal() {
       const uid = allUsers[i].id;
       const { data: pos } = await sb.from('trader_positions')
         .select('id, entry_variation').eq('signal_id', signal.id).eq('user_id', uid).maybeSingle();
-      const variation  = pos ? pos.entry_variation : sgVariation(i);
+      const variation = sgVariation(i); // Always recalculate — never reuse stored variation
       const entryPrice = _sgOtype === 'MARKET' ? price : price + sign * i * spread + variation;
       if (pos) {
         // Recalcular variación y precio — siempre resetear al republicar
