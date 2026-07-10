@@ -1,0 +1,2206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Armex Trading — Panel de Control</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg:#0d1117; --surface:#161b22; --surface2:#1c2128;
+  --border:#30363d; --border2:#21262d;
+  --blue:#58a6ff; --green:#3fb950; --red:#f85149;
+  --orange:#f0883e; --purple:#bc8cff; --yellow:#e3b341;
+  --text:#e6edf3; --muted:#8b949e; --faint:#484f58;
+  --sidebar-w:220px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;}
+
+/* LOGIN */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:40px 36px;width:380px;box-shadow:0 12px 40px rgba(0,0,0,.6);}
+.login-card h1{font-size:20px;color:var(--blue);text-align:center;margin-bottom:4px;}
+.login-card p{color:var(--faint);text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:28px;}
+.btn-primary{width:100%;background:var(--blue);color:#0d1117;border:none;padding:13px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:opacity .15s;}
+.btn-primary:hover{opacity:.88;}
+.login-error{color:var(--red);font-size:12px;text-align:center;margin-top:10px;}
+
+/* APP SHELL */
+#app{display:none;height:100vh;flex-direction:row;}
+#app.visible{display:flex;}
+
+/* SIDEBAR */
+#sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border2);display:flex;flex-direction:column;flex-shrink:0;}
+.sidebar-brand{padding:20px 18px 16px;border-bottom:1px solid var(--border2);}
+.sidebar-brand h2{font-size:15px;color:var(--blue);font-weight:700;}
+.sidebar-brand p{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.8px;margin-top:2px;}
+.sidebar-user{padding:12px 18px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px;}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#0d1117;flex-shrink:0;}
+.user-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.user-role{font-size:10px;color:var(--faint);}
+nav{flex:1;padding:10px 0;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;color:var(--muted);cursor:pointer;transition:all .12s;font-size:13px;font-weight:500;border-left:3px solid transparent;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:var(--surface2);color:var(--blue);border-left-color:var(--blue);}
+.nav-icon{font-size:16px;width:20px;text-align:center;}
+.sidebar-footer{padding:14px 18px;border-top:1px solid var(--border2);}
+.btn-logout{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:9px;border-radius:7px;font-size:12px;cursor:pointer;transition:all .12s;}
+.btn-logout:hover{border-color:var(--red);color:var(--red);}
+
+/* MAIN */
+#main{flex:1;overflow-y:auto;background:var(--bg);}
+.page{display:none;padding:24px 28px;min-height:100%;}
+.page.active{display:block;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.page-header h1{font-size:20px;font-weight:700;}
+.page-header p{font-size:12px;color:var(--muted);margin-top:2px;}
+
+/* STAT CARDS */
+.stats-grid{display:grid;gap:14px;margin-bottom:16px;}
+.cols4{grid-template-columns:repeat(4,1fr);}
+.cols3{grid-template-columns:repeat(3,1fr);}
+.cols2{grid-template-columns:repeat(2,1fr);}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;}
+.stat-card .s-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
+.stat-card .s-val{font-size:22px;font-weight:800;line-height:1;}
+.stat-card .s-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.stat-card .s-sub2{font-size:10px;color:var(--faint);margin-top:2px;}
+.stat-card.blue{border-top:2px solid var(--blue);} .stat-card.blue .s-val{color:var(--blue);}
+.stat-card.green{border-top:2px solid var(--green);} .stat-card.green .s-val{color:var(--green);}
+.stat-card.red{border-top:2px solid var(--red);} .stat-card.red .s-val{color:var(--red);}
+.stat-card.orange{border-top:2px solid var(--orange);} .stat-card.orange .s-val{color:var(--orange);}
+.stat-card.purple{border-top:2px solid var(--purple);} .stat-card.purple .s-val{color:var(--purple);}
+.stat-card.yellow{border-top:2px solid var(--yellow);} .stat-card.yellow .s-val{color:var(--yellow);}
+
+/* SECTION LABEL */
+.section-divider{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--faint);margin:18px 0 10px;display:flex;align-items:center;gap:8px;}
+.section-divider::after{content:'';flex:1;height:1px;background:var(--border2);}
+
+/* TABLES */
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;}
+.table-card-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border2);}
+.table-card-header h3{font-size:14px;font-weight:600;}
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;padding:10px 14px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--border2);white-space:nowrap;}
+td{padding:10px 14px;border-bottom:1px solid var(--border2);font-size:13px;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,.02);}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;}
+.badge-eval{background:#2a2200;color:var(--yellow);border:1px solid #3a3210;}
+.badge-funded{background:#0e2a1a;color:var(--green);border:1px solid #1a3a1a;}
+.badge-burned{background:#2a1010;color:var(--red);border:1px solid #3a1515;}
+.badge-futures{background:#0d1f3a;color:var(--blue);border:1px solid #1a2a4a;}
+.badge-cfd{background:#2a1040;color:var(--purple);border:1px solid #3a1550;}
+.badge-mxn{background:#1a2a20;color:#4ec989;border:1px solid #2a3a30;font-size:10px;padding:2px 6px;}
+.badge-usd{background:#0d1f3a;color:var(--blue);border:1px solid #1a2a4a;font-size:10px;padding:2px 6px;}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+.dot-green{background:var(--green);} .dot-yellow{background:var(--yellow);} .dot-red{background:var(--red);}
+
+/* PROGRESS */
+.progress-wrap{display:flex;align-items:center;gap:8px;}
+.progress-bar{flex:1;height:6px;background:var(--border2);border-radius:3px;overflow:hidden;min-width:60px;}
+.progress-fill{height:100%;border-radius:3px;transition:width .3s;}
+.progress-label{font-size:11px;color:var(--muted);white-space:nowrap;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .12s;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-blue{background:var(--blue);color:#0d1117;} .btn-blue:hover{opacity:.88;}
+.btn-green{background:rgba(63,185,80,.15);color:var(--green);border:1px solid var(--green);} .btn-green:hover{background:rgba(63,185,80,.25);}
+.btn-red{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);} .btn-red:hover{background:rgba(248,81,73,.25);}
+.btn-ghost{background:var(--surface2);color:var(--muted);border:1px solid var(--border);} .btn-ghost:hover{color:var(--text);}
+
+/* FILTER BAR */
+.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+.filter-bar select,.filter-bar input{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:7px;font-size:13px;outline:none;}
+
+/* MODAL */
+#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;align-items:center;justify-content:center;}
+#modal-overlay.open{display:flex;}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:540px;max-width:96vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.8);}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border2);}
+.modal-header h3{font-size:16px;font-weight:700;}
+.modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1;}
+.modal-close:hover{color:var(--text);}
+.modal-body{padding:22px;}
+.modal-footer{padding:16px 22px;border-top:1px solid var(--border2);display:flex;justify-content:flex-end;gap:8px;}
+
+/* FORM */
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;}
+.field input,.field select,.field textarea{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);padding:10px 13px;border-radius:8px;font-size:14px;outline:none;font-family:inherit;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue);}
+.field textarea{resize:vertical;min-height:72px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.field-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+
+/* CURRENCY TOGGLE */
+.cur-toggle{display:flex;gap:0;margin-bottom:0;}
+.cur-btn{flex:1;background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);padding:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;text-align:center;}
+.cur-btn:first-child{border-radius:8px 0 0 8px;border-right:none;}
+.cur-btn:last-child{border-radius:0 8px 8px 0;}
+.cur-btn.active-mxn{background:#1a2a20;border-color:#4ec989;color:#4ec989;}
+.cur-btn.active-usd{background:#0d1f3a;border-color:var(--blue);color:var(--blue);}
+
+.rate-wrap{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px;margin-top:10px;}
+.preview-usd{font-size:12px;color:var(--blue);margin-top:6px;font-weight:600;}
+.preview-mxn{font-size:12px;color:#4ec989;margin-top:6px;font-weight:600;}
+
+/* MISC */
+.two-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.empty-state{text-align:center;padding:40px 20px;color:var(--faint);font-size:13px;}
+.empty-state .e-icon{font-size:32px;margin-bottom:10px;opacity:.4;}
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;}
+.alert-red{background:#2a1010;border:1px solid var(--red);color:var(--red);}
+.alert-green{background:#0e2a1a;border:1px solid var(--green);color:var(--green);}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-center{display:flex;justify-content:center;padding:40px;}
+.dual-amount .main{font-weight:700;}
+.dual-amount .sub{font-size:10px;color:var(--muted);margin-top:1px;}
+
+/* ─── SEÑALES ─── */
+.sg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:4px;}
+@media(max-width:1000px){.sg-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:600px){.sg-grid{grid-template-columns:1fr;}}
+.sg-card{border-radius:14px;padding:20px 16px;}
+.sg-card-hd{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;}
+.sg-price{font-size:32px;font-weight:900;line-height:1;margin-bottom:2px;}
+.sg-order{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;}
+.sg-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid rgba(255,255,255,.05);}
+.sg-rl{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.8px;}
+.sg-rv{font-size:13px;font-weight:700;color:var(--text);}
+.sg-contracts{margin-top:10px;font-size:28px;font-weight:900;text-align:center;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);}
+.sg-hero{background:var(--surface);border:2px solid;border-radius:16px;padding:28px 24px;text-align:center;}
+.sg-hero-dir{font-size:22px;font-weight:900;letter-spacing:1px;margin-bottom:8px;}
+.sg-hero-price{font-size:54px;font-weight:900;line-height:1;margin-bottom:6px;}
+.sg-hero-sub{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+.sg-hero-note{background:#0e2a1a;border:1px solid #1e3a28;border-radius:8px;padding:8px 12px;font-size:13px;color:var(--green);margin-top:12px;}
+.sg-panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
+.sg-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;}
+.sg-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media(max-width:900px){.sg-4{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:500px){.sg-4{grid-template-columns:1fr;}}
+.sg-input{width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:14px;outline:none;font-family:inherit;}
+.sg-input:focus{border-color:var(--blue);}
+.sg-input::placeholder{color:var(--faint);font-size:12px;}
+.tgl-grp{display:flex;gap:6px;flex-wrap:wrap;}
+.tgl{background:var(--surface2);border:1.5px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;transition:all .12s;}
+.tgl:hover{border-color:var(--blue);}
+.tgl.on-green{background:#0e2a1a;border-color:var(--green);color:var(--green);}
+.tgl.on-red{background:#2a1010;border-color:var(--red);color:var(--red);}
+.tgl.on-blue{background:#0d1f38;border-color:var(--blue);color:var(--blue);}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;}
+.btn-outline:hover{border-color:var(--blue);color:var(--blue);}
+.badge-green{background:#0e2a1a;color:var(--green);border:1px solid #1a3a1a;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>⚡ ARMEX TRADING</h1>
+    <p>Panel de Control · Prop Firms</p>
+    <div class="field"><label>Correo</label><input type="email" id="login-email" placeholder="correo@armex.mx"></div>
+    <div class="field"><label>Contraseña</label><input type="password" id="login-pass" placeholder="••••••••"></div>
+    <button class="btn-primary" onclick="doLogin()">Entrar</button>
+    <div id="login-err" class="login-error"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-brand"><h2>⚡ ARMEX TRADING</h2><p>Prop Firms Dashboard</p></div>
+    <div class="sidebar-user">
+      <div class="avatar" id="sidebar-avatar">J</div>
+      <div><div class="user-name" id="sidebar-name">—</div><div class="user-role" id="sidebar-role">—</div></div>
+    </div>
+    <nav>
+      <div class="nav-item active" onclick="goTo('dashboard')"><span class="nav-icon">📊</span>Dashboard</div>
+      <div class="nav-item" onclick="goTo('cuentas')"><span class="nav-icon">🏦</span>Cuentas</div>
+      <div class="nav-item" onclick="goTo('movimientos')"><span class="nav-icon">📝</span>Movimientos</div>
+      <div class="nav-item" onclick="goTo('capital')"><span class="nav-icon">💰</span>Capital</div>
+      <div class="nav-item" onclick="goTo('traders')"><span class="nav-icon">👥</span>Traders</div>
+      <div class="nav-item" onclick="goTo('equipos')"><span class="nav-icon">💻</span>Equipos</div>
+      <div class="nav-item" onclick="goTo('rendimiento')"><span class="nav-icon">🏆</span>Rendimiento</div>
+      <div class="nav-item" onclick="goTo('senales')"><span class="nav-icon">🎯</span>Señales</div>
+    </nav>
+    <div class="sidebar-footer"><button class="btn-logout" onclick="doLogout()">Cerrar sesión</button></div>
+  </div>
+
+  <div id="main">
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <div><h1>Dashboard</h1><p>Resumen general de todas las cuentas</p></div>
+        <div id="dash-date" style="color:var(--muted);font-size:12px;"></div>
+      </div>
+      <div id="dash-content"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+
+    <div id="page-cuentas" class="page">
+      <div class="page-header">
+        <div><h1>Cuentas de Fondeo</h1><p>Gestión de todas las prop firm accounts</p></div>
+        <button class="btn btn-blue" onclick="openModalCuenta()">+ Nueva cuenta</button>
+      </div>
+      <div class="filter-bar">
+        <select id="f-firma" onchange="loadCuentas()"><option value="">Todas las firmas</option>
+          <option>TopStep</option><option>Lucid</option><option>Apex</option>
+          <option>FundedNext</option><option>MyFundedFutures</option><option>Otra</option>
+        </select>
+        <select id="f-fase" onchange="loadCuentas()"><option value="">Todas las fases</option>
+          <option value="evaluation">Evaluación</option><option value="funded">Fondeada</option><option value="burned">Quemada</option>
+        </select>
+        <select id="f-tipo" onchange="loadCuentas()"><option value="">Todos los tipos</option>
+          <option value="futures">Futuros</option><option value="cfd">CFD</option>
+        </select>
+        <select id="f-trader" onchange="loadCuentas()"><option value="">Todos los traders</option></select>
+      </div>
+      <div id="cuentas-content"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+
+    <div id="page-movimientos" class="page">
+      <div class="page-header">
+        <div><h1>Movimientos</h1><p>Payouts, quemas y fees por cuenta</p></div>
+        <button class="btn btn-blue" onclick="openModalEvento()">+ Registrar movimiento</button>
+      </div>
+      <div class="filter-bar">
+        <select id="fm-tipo" onchange="loadMovimientos()"><option value="">Todos los tipos</option>
+          <option value="payout">Payout</option><option value="burn">Quema</option>
+          <option value="monthly_fee">Fee mensual</option><option value="activation_fee">Fee activación</option><option value="other">Otro</option>
+        </select>
+        <select id="fm-cuenta" onchange="loadMovimientos()"><option value="">Todas las cuentas</option></select>
+      </div>
+      <div id="movimientos-content"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+
+    <div id="page-capital" class="page">
+      <div class="page-header"><div><h1>Capital</h1><p>Ingresos y gastos del negocio</p></div></div>
+      <div class="two-cols">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <h3 style="font-size:15px;">💵 Ingresos de capital</h3>
+            <button class="btn btn-green btn-sm" onclick="openModalIngreso()">+ Ingreso</button>
+          </div>
+          <div id="ingresos-content"><div class="loading-center"><div class="spinner"></div></div></div>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <h3 style="font-size:15px;">🧾 Gastos generales</h3>
+            <button class="btn btn-red btn-sm" onclick="openModalGasto()">+ Gasto</button>
+          </div>
+          <div id="gastos-content"><div class="loading-center"><div class="spinner"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-traders" class="page">
+      <div class="page-header">
+        <div><h1>Traders</h1><p>Personas que gestionan cuentas</p></div>
+        <button class="btn btn-blue" onclick="openModalTrader()">+ Nuevo trader</button>
+      </div>
+      <div id="traders-content"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+
+    <div id="page-equipos" class="page">
+      <div class="page-header">
+        <div><h1>Equipos</h1><p>Dispositivos asignados a cada trader</p></div>
+        <button class="btn btn-blue" onclick="openModalEquipo()">+ Agregar equipo</button>
+      </div>
+      <div class="filter-bar">
+        <select id="feq-trader" onchange="loadEquipos()"><option value="">Todos los traders</option></select>
+        <select id="feq-type" onchange="loadEquipos()">
+          <option value="">Todos los tipos</option>
+          <option value="modem">📡 Modem</option>
+          <option value="tablet">📱 Tablet</option>
+          <option value="computadora">🖥️ Computadora</option>
+          <option value="mac">🍎 Mac</option>
+        </select>
+        <select id="feq-status" onchange="loadEquipos()">
+          <option value="">Todos los estados</option>
+          <option value="active">Activo</option>
+          <option value="returned">Devuelto</option>
+          <option value="lost">Extraviado</option>
+        </select>
+      </div>
+      <div id="equipos-content"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+
+    <div id="page-rendimiento" class="page">
+      <div class="page-header">
+        <div><h1>Rendimiento por Trader</h1><p>Ranking y estadísticas individuales</p></div>
+      </div>
+      <div id="rendimiento-content"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+
+    <div id="page-senales" class="page">
+      <div class="page-header">
+        <div><h1>🎯 Señales</h1><p>Entradas del día para el equipo</p></div>
+      </div>
+      <div id="senales-content"><div class="loading-center"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" onclick="closeModalIfOutside(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modal-title"></h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+// SUPABASE
+// ══════════════════════════════════════
+const SUPA_URL = 'https://api.armex.website';
+const SUPA_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3ODc5MTUwMCwiZXhwIjo0OTM0NDY1MTAwLCJyb2xlIjoiYW5vbiJ9.dtLo8ORbaOLn6EjgGuyZKvcccX2i1bREfbuR_eRVENE';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+let currentUser = null, userProfile = null, allTraders = [];
+
+// ══════════════════════════════════════
+// HELPERS — FORMATO
+// ══════════════════════════════════════
+const fmtUSD = n => n == null ? '—' : '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}) + ' USD';
+const fmtMXN = n => n == null ? '—' : '$' + Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' MXN';
+const fmtN   = n => n == null ? '—' : Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtDate= d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+const toUSD  = (amount, currency, rate) => {
+  if (!amount) return 0;
+  if (currency === 'USD') return Number(amount);
+  return rate ? Number(amount) / Number(rate) : 0;
+};
+const toMXN = (amount, currency, rate) => {
+  if (!amount) return 0;
+  if (currency === 'MXN') return Number(amount);
+  return rate ? Number(amount) * Number(rate) : 0;
+};
+
+const phaseBadge = p => ({
+  evaluation: '<span class="badge badge-eval"><span class="dot dot-yellow"></span>Evaluación</span>',
+  funded:     '<span class="badge badge-funded"><span class="dot dot-green"></span>Fondeada</span>',
+  burned:     '<span class="badge badge-burned"><span class="dot dot-red"></span>Quemada</span>',
+})[p] || p;
+const typeBadge  = t => t==='futures' ? '<span class="badge badge-futures">Futuros</span>' : '<span class="badge badge-cfd">CFD</span>';
+const curBadge   = c => c==='MXN' ? '<span class="badge badge-mxn">MXN</span>' : '<span class="badge badge-usd">USD</span>';
+const eventLabel = t => ({payout:'💸 Payout',burn:'🔥 Quema',monthly_fee:'📅 Fee mensual',activation_fee:'🏷️ Fee activación',other:'📌 Otro'})[t]||t;
+const sourceLabel= s => ({empresa:'🏢 Empresa',aportacion_personal:'👤 Aportación personal',aportacion_tercero:'🤝 Aportación tercero'})[s]||s;
+const catLabel   = c => ({tablet:'📱 Tablet',computadora:'💻 Computadora',modem:'📡 Modem',sim:'📶 SIM / Línea',suscripcion:'🔄 Suscripción',servicio:'⚙️ Servicio',equipo:'💻 Equipo',otro:'📦 Otro'})[c]||c;
+
+function progressBar(current, target, lossLimit) {
+  if (!target) return '—';
+  const pct = Math.min(100, Math.max(0, (current / target) * 100));
+  const color = current < 0 ? 'var(--red)' : pct >= 100 ? 'var(--green)' : 'var(--blue)';
+  return `<div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span class="progress-label">${fmtN(current)}/${fmtN(target)}</span>
+  </div>
+  <div style="font-size:10px;color:var(--muted);margin-top:2px;">Faltan: ${fmtUSD(Math.max(0,target-current))} · MLL: ${fmtUSD(lossLimit)}</div>`;
+}
+
+// ══════════════════════════════════════
+// CURRENCY TOGGLE UI
+// ══════════════════════════════════════
+function curToggleHTML(prefix, defaultCur='MXN') {
+  const isMXN = defaultCur === 'MXN';
+  return `
+  <div class="field">
+    <label>Moneda</label>
+    <div class="cur-toggle">
+      <button type="button" id="${prefix}-btn-mxn" class="cur-btn ${isMXN?'active-mxn':''}" onclick="setCur('${prefix}','MXN')">🇲🇽 MXN (Pesos)</button>
+      <button type="button" id="${prefix}-btn-usd" class="cur-btn ${!isMXN?'active-usd':''}" onclick="setCur('${prefix}','USD')">🇺🇸 USD (Dólares)</button>
+    </div>
+  </div>
+  <div id="${prefix}-rate-wrap" style="${isMXN?'':'display:none'}">
+    <div class="rate-wrap">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Tipo de cambio (cuántos pesos = 1 dólar)</div>
+      <input id="${prefix}-rate" type="number" value="17.50" step="0.01" style="background:var(--bg);border:1.5px solid var(--border);color:var(--text);padding:8px 12px;border-radius:7px;font-size:14px;outline:none;width:160px;" oninput="calcPreview('${prefix}')">
+      <div id="${prefix}-preview" class="preview-usd"></div>
+    </div>
+  </div>`;
+}
+
+function setCur(prefix, cur) {
+  document.getElementById(prefix+'-btn-mxn').className = 'cur-btn' + (cur==='MXN'?' active-mxn':'');
+  document.getElementById(prefix+'-btn-usd').className = 'cur-btn' + (cur==='USD'?' active-usd':'');
+  const rateWrap = document.getElementById(prefix+'-rate-wrap');
+  if (rateWrap) rateWrap.style.display = cur==='MXN' ? '' : 'none';
+  calcPreview(prefix);
+}
+
+function getCur(prefix) {
+  return document.getElementById(prefix+'-btn-usd')?.classList.contains('active-usd') ? 'USD' : 'MXN';
+}
+
+function calcPreview(prefix) {
+  const cur    = getCur(prefix);
+  const amount = Number(document.getElementById(prefix+'-amount')?.value || 0);
+  const rate   = Number(document.getElementById(prefix+'-rate')?.value || 17.5);
+  const prev   = document.getElementById(prefix+'-preview');
+  if (!prev || !amount) { if(prev) prev.textContent=''; return; }
+  if (cur === 'MXN') {
+    prev.innerHTML = `≈ <strong>${fmtUSD(amount/rate)}</strong>`;
+    prev.className = 'preview-usd';
+  } else {
+    prev.innerHTML = `≈ <strong>${fmtMXN(amount*rate)}</strong>`;
+    prev.className = 'preview-mxn';
+  }
+}
+
+// ══════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════
+async function init() {
+  const { data:{ session } } = await sb.auth.getSession();
+  if (session) { currentUser = session.user; await loadProfile(); showApp(); }
+  else showLogin();
+}
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-err');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'Ingresa correo y contraseña'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) { errEl.textContent = 'Correo o contraseña incorrectos'; return; }
+  currentUser = data.user;
+  await loadProfile(); showApp();
+}
+async function doLogout() {
+  await sb.auth.signOut();
+  currentUser = null; userProfile = null;
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-screen').style.display = 'flex';
+}
+async function loadProfile() {
+  const { data } = await sb.from('trading_users').select('*').eq('id', currentUser.id).maybeSingle();
+  if (!data) {
+    // Usuario no autorizado para este dashboard
+    await sb.auth.signOut();
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('login-err').textContent = 'Tu cuenta no tiene acceso a este sistema. Contacta al administrador.';
+    return;
+  }
+  userProfile = data;
+  document.getElementById('sidebar-avatar').textContent = (userProfile.name||'U')[0].toUpperCase();
+  document.getElementById('sidebar-name').textContent   = userProfile.name || currentUser.email;
+  const roleLabels = {admin:'Administrador', manager:'Manager', trader:'Trader'};
+  document.getElementById('sidebar-role').textContent   = roleLabels[userProfile.role] || userProfile.role;
+}
+function showLogin() { document.getElementById('login-screen').style.display='flex'; document.getElementById('app').classList.remove('visible'); }
+function showApp() {
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('dash-date').textContent = new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const isTrader = userProfile?.role === 'trader';
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.style.display = (isTrader && !n.getAttribute('onclick')?.includes("'senales'")) ? 'none' : '';
+  });
+  goTo(isTrader ? 'senales' : 'dashboard');
+}
+document.getElementById('login-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// ══════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════
+function goTo(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>{ if(n.getAttribute('onclick')?.includes("'"+page+"'")) n.classList.add('active'); });
+  if (page==='dashboard')   loadDashboard();
+  if (page==='cuentas')     { loadTraderFilter(); loadCuentas(); }
+  if (page==='movimientos') { loadMovimientos(); loadCuentasFilter(); }
+  if (page==='capital')     { loadIngresos(); loadGastos(); }
+  if (page==='traders')     loadTraders();
+  if (page==='equipos')     { loadEquipoTraderFilter(); loadEquipos(); }
+  if (page==='rendimiento') loadRendimiento();
+  if (page==='senales')     loadSenales();
+}
+
+// ══════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════
+function daysBetween(d1, d2) {
+  if (!d1) return null;
+  const a = new Date(d1+'T12:00:00'), b = d2 ? new Date(d2+'T12:00:00') : new Date();
+  return Math.max(0, Math.round((b-a)/(1000*60*60*24)));
+}
+
+async function loadDashboard() {
+  const el = document.getElementById('dash-content');
+  el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
+  const [{ data: accounts }, { data: events }, { data: income }, { data: expenses }] = await Promise.all([
+    sb.from('trading_accounts').select('*'),
+    sb.from('trading_events').select('*'),
+    sb.from('trading_income').select('*'),
+    sb.from('trading_expenses').select('*'),
+  ]);
+  const accs = accounts||[], evts = events||[], inc = income||[], exp = expenses||[];
+
+  // Segmentar por fase
+  const evalAccs   = accs.filter(a=>a.phase==='evaluation');
+  const fundedAccs = accs.filter(a=>a.phase==='funded');
+  const burnedAccs = accs.filter(a=>a.phase==='burned');
+
+  // ── P&L REAL (solo cuentas terminadas: fondeadas + quemadas) ──
+  const completedIds  = new Set([...fundedAccs, ...burnedAccs].map(a=>a.id));
+  const realPayouts   = evts.filter(e=>e.event_type==='payout').reduce((s,e)=>s+Number(e.amount_usd||e.amount||0),0);
+  const realCostUSD   = [...fundedAccs,...burnedAccs].reduce((s,a)=>s+Number(a.cost_initial||0),0);
+  const realFeesUSD   = evts.filter(e=>['monthly_fee','activation_fee'].includes(e.event_type) && completedIds.has(e.account_id))
+                            .reduce((s,e)=>s+Number(e.amount_usd||e.amount||0),0);
+  const realInvUSD    = realCostUSD + realFeesUSD;
+  const netPLUSD      = realPayouts - realInvUSD;
+  const rentPct       = realInvUSD>0 ? ((netPLUSD/realInvUSD)*100).toFixed(1) : 0;
+  const totalBurnedUSD= burnedAccs.reduce((s,a)=>s+Number(a.cost_initial||0),0);
+
+  // ── EN JUEGO (evaluaciones activas) ──
+  const enJuegoUSD    = evalAccs.reduce((s,a)=>s+Number(a.cost_initial||0),0);
+  const enJuegoFeesUSD= evts.filter(e=>['monthly_fee','activation_fee'].includes(e.event_type) && evalAccs.find(a=>a.id===e.account_id))
+                            .reduce((s,e)=>s+Number(e.amount_usd||e.amount||0),0);
+  const enJuegoTotal  = enJuegoUSD + enJuegoFeesUSD;
+
+  // ── ESTADÍSTICAS DE EVALUACIÓN ──
+  // Tasa de éxito
+  const completed = fundedAccs.length + burnedAccs.length;
+  const tasaExito = completed>0 ? ((fundedAccs.length/completed)*100).toFixed(0) : null;
+
+  // Días promedio para pasar (funded con funded_date y purchase_date)
+  const conDias = fundedAccs.filter(a=>a.funded_date && a.purchase_date);
+  const promDiasPasar = conDias.length>0
+    ? Math.round(conDias.reduce((s,a)=>s+daysBetween(a.purchase_date, a.funded_date),0)/conDias.length)
+    : null;
+
+  // Días promedio en eval activa (desde purchase_date hasta hoy)
+  const evalConFecha = evalAccs.filter(a=>a.purchase_date);
+  const promDiasEval = evalConFecha.length>0
+    ? Math.round(evalConFecha.reduce((s,a)=>s+daysBetween(a.purchase_date, null),0)/evalConFecha.length)
+    : null;
+
+  // Ganancia diaria promedio en evals activas
+  const evalConPnl = evalAccs.filter(a=>a.current_pnl>0 && a.purchase_date);
+  const promGanDiaria = evalConPnl.length>0
+    ? evalConPnl.reduce((s,a)=>{
+        const dias = daysBetween(a.purchase_date, null)||1;
+        return s + (Number(a.current_pnl)/dias);
+      }, 0) / evalConPnl.length
+    : null;
+
+  // Progreso promedio hacia objetivo en evals activas
+  const evalConTarget = evalAccs.filter(a=>a.profit_target>0);
+  const promProgreso = evalConTarget.length>0
+    ? (evalConTarget.reduce((s,a)=>s+Math.max(0,Number(a.current_pnl||0))/Number(a.profit_target),0)/evalConTarget.length*100).toFixed(0)
+    : null;
+
+  // Costo promedio por cuenta fondeada
+  const costoPorFondeada = fundedAccs.length>0 && realInvUSD>0
+    ? (realInvUSD / fundedAccs.length).toFixed(0)
+    : null;
+
+  // ── CAPITAL MXN ──
+  const totalAportMXN  = inc.filter(i=>i.currency==='MXN').reduce((s,i)=>s+Number(i.amount||0),0)
+                       + inc.filter(i=>i.currency==='USD'||!i.currency).reduce((s,i)=>s+Number(toMXN(i.amount,'USD',i.exchange_rate)||0),0);
+  const totalGastosMXN = exp.filter(e=>e.currency==='MXN'||!e.currency).reduce((s,e)=>s+Number(e.amount||0),0)
+                       + exp.filter(e=>e.currency==='USD').reduce((s,e)=>s+Number(toMXN(e.amount,'USD',e.exchange_rate)||0),0);
+  const totalCuentasMXN= accs.reduce((s,a)=>s+Number(a.cost_mxn||0),0);
+  const saldoMXN       = totalAportMXN - totalGastosMXN - totalCuentasMXN;
+
+  // ── COLORES ──
+  const netColor   = netPLUSD>=0?'green':'red';
+  const rentColor  = Number(rentPct)>=0?'green':'red';
+  const saldoColor = saldoMXN>=0?'green':'red';
+  const tasaColor  = !tasaExito ? 'faint' : Number(tasaExito)>=50?'green':'red';
+
+  // ── TABLAS ──
+  const evalRows = evalAccs.length ? evalAccs.map(a=>{
+    const dias = daysBetween(a.purchase_date, null);
+    return `<tr>
+      <td><strong>${a.firm}</strong><div style="font-size:11px;color:var(--muted)">${a.account_holder} · #${a.account_number||'—'}</div></td>
+      <td>${typeBadge(a.account_type)}</td>
+      <td>${fmtUSD(a.account_size)}</td>
+      <td>${progressBar(Number(a.current_pnl||0),Number(a.profit_target),Number(a.max_loss_limit))}</td>
+      <td style="color:var(--muted);font-size:12px">${dias!=null?dias+'d':'—'}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openModalUpdatePnl('${a.id}','${a.firm}',${a.current_pnl||0})">📊 P&L</button></td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6"><div class="empty-state"><div class="e-icon">🏦</div>Sin cuentas en evaluación</div></td></tr>';
+
+  const recent = [...evts].sort((a,b)=>new Date(b.event_date)-new Date(a.event_date)).slice(0,8);
+  const recentRows = recent.length ? recent.map(e=>{
+    const acc=accs.find(a=>a.id===e.account_id);
+    const isIn=e.event_type==='payout';
+    const col=isIn?'var(--green)':'var(--red)';
+    const amtDisplay = e.currency==='MXN'
+      ? `<span style="color:${col};font-weight:700">${isIn?'+':'-'}${fmtMXN(Math.abs(e.amount))}</span><div style="font-size:10px;color:var(--muted)">≈ ${fmtUSD(e.amount_usd)}</div>`
+      : `<span style="color:${col};font-weight:700">${isIn?'+':'-'}${fmtUSD(Math.abs(e.amount))}</span>`;
+    return `<tr>
+      <td>${fmtDate(e.event_date)}</td><td>${eventLabel(e.event_type)}</td>
+      <td style="font-size:12px;color:var(--muted)">${acc?acc.firm+' '+fmtN(acc.account_size):'—'}</td>
+      <td>${amtDisplay}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="4"><div class="empty-state">Sin movimientos</div></td></tr>';
+
+  el.innerHTML = `
+    <div class="section-divider">💵 P&L Real — cuentas fondeadas y quemadas</div>
+    <div class="stats-grid cols4">
+      <div class="stat-card blue"><div class="s-label">Invertido (real)</div><div class="s-val">${fmtUSD(realInvUSD)}</div><div class="s-sub">Cuentas terminadas + fees</div><div class="s-sub2">Evals activas: ${fmtUSD(enJuegoTotal)} (en juego)</div></div>
+      <div class="stat-card green"><div class="s-label">Total cobrado</div><div class="s-val">${fmtUSD(realPayouts)}</div><div class="s-sub">Payouts recibidos</div></div>
+      <div class="stat-card ${netColor}"><div class="s-label">P&L Neto</div><div class="s-val">${netPLUSD>=0?'+':''}${fmtUSD(netPLUSD)}</div><div class="s-sub">Cobrado vs invertido real</div></div>
+      <div class="stat-card ${rentColor}"><div class="s-label">Rentabilidad</div><div class="s-val">${rentPct}%</div><div class="s-sub">Sobre cuentas terminadas</div></div>
+    </div>
+    <div class="stats-grid cols4">
+      <div class="stat-card yellow"><div class="s-label">En evaluación</div><div class="s-val">${evalAccs.length}</div><div class="s-sub">${fmtUSD(enJuegoTotal)} en juego</div></div>
+      <div class="stat-card green"><div class="s-label">Fondeadas</div><div class="s-val">${fundedAccs.length}</div><div class="s-sub">generando retiros</div></div>
+      <div class="stat-card red"><div class="s-label">Quemadas</div><div class="s-val">${burnedAccs.length}</div><div class="s-sub">${fmtUSD(totalBurnedUSD)} perdidos</div></div>
+      <div class="stat-card blue"><div class="s-label">Total cuentas</div><div class="s-val">${accs.length}</div><div class="s-sub">historial completo</div></div>
+    </div>
+
+    <div class="section-divider">📊 Estadísticas de evaluación</div>
+    <div class="stats-grid cols4" style="grid-template-columns:repeat(3,1fr) repeat(3,1fr);grid-template-columns:repeat(6,1fr)">
+      <div class="stat-card ${tasaColor}">
+        <div class="s-label">Tasa de éxito</div>
+        <div class="s-val">${tasaExito!=null?tasaExito+'%':'—'}</div>
+        <div class="s-sub">${fundedAccs.length} fondeadas / ${completed} intentos</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="s-label">Días para pasar</div>
+        <div class="s-val">${promDiasPasar!=null?promDiasPasar+'d':'—'}</div>
+        <div class="s-sub">Promedio (cuentas pasadas)</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="s-label">Días en eval activa</div>
+        <div class="s-val">${promDiasEval!=null?promDiasEval+'d':'—'}</div>
+        <div class="s-sub">Promedio evals abiertas</div>
+      </div>
+      <div class="stat-card green">
+        <div class="s-label">Ganancia diaria prom.</div>
+        <div class="s-val">${promGanDiaria!=null?'$'+Number(promGanDiaria).toFixed(0):'—'}</div>
+        <div class="s-sub">USD/día en evals activas</div>
+      </div>
+      <div class="stat-card yellow">
+        <div class="s-label">Progreso promedio</div>
+        <div class="s-val">${promProgreso!=null?promProgreso+'%':'—'}</div>
+        <div class="s-sub">Hacia objetivo en evals</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="s-label">Costo / fondeada</div>
+        <div class="s-val">${costoPorFondeada?'$'+Number(costoPorFondeada).toLocaleString('en-US'):'—'}</div>
+        <div class="s-sub">USD por cuenta aprobada</div>
+      </div>
+    </div>
+
+    <div class="section-divider">🇲🇽 Capital — en pesos mexicanos</div>
+    <div class="stats-grid cols4">
+      <div class="stat-card green"><div class="s-label">Total aportado</div><div class="s-val">${fmtMXN(totalAportMXN)}</div><div class="s-sub">Inversiones recibidas</div></div>
+      <div class="stat-card orange"><div class="s-label">Compra de cuentas</div><div class="s-val">${fmtMXN(totalCuentasMXN)}</div><div class="s-sub">Cargo tarjeta en pesos</div></div>
+      <div class="stat-card red"><div class="s-label">Gastos generales</div><div class="s-val">${fmtMXN(totalGastosMXN)}</div><div class="s-sub">Equipo, servicios, etc.</div></div>
+      <div class="stat-card ${saldoColor}"><div class="s-label">Saldo capital</div><div class="s-val">${fmtMXN(saldoMXN)}</div><div class="s-sub">Aportado − cuentas − gastos</div></div>
+    </div>
+
+    <div class="two-cols">
+      <div class="table-card">
+        <div class="table-card-header"><h3>📈 Cuentas en evaluación</h3></div>
+        <table><thead><tr><th>Cuenta</th><th>Tipo</th><th>Monto</th><th>Progreso</th><th>Días</th><th></th></tr></thead><tbody>${evalRows}</tbody></table>
+      </div>
+      <div class="table-card">
+        <div class="table-card-header"><h3>🕒 Movimientos recientes</h3></div>
+        <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Monto</th></tr></thead><tbody>${recentRows}</tbody></table>
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════
+// CUENTAS
+// ══════════════════════════════════════
+async function loadCuentas() {
+  const el = document.getElementById('cuentas-content');
+  el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
+  let q = sb.from('trading_accounts').select('*,trading_traders(name)').order('created_at',{ascending:false});
+  const firma=document.getElementById('f-firma')?.value, fase=document.getElementById('f-fase')?.value;
+  const tipo=document.getElementById('f-tipo')?.value, trader=document.getElementById('f-trader')?.value;
+  if (firma) q=q.eq('firm',firma); if (fase) q=q.eq('phase',fase);
+  if (tipo)  q=q.eq('account_type',tipo); if (trader) q=q.eq('trader_id',trader);
+  const { data } = await q;
+  const accs = data||[];
+  if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🏦</div>Sin cuentas. Agrega la primera.</div>'; return; }
+  const rows = accs.map(a=>{
+    const pnl=Number(a.current_pnl||0), tgt=Number(a.profit_target||0), mll=Number(a.max_loss_limit||0);
+    const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)
+               : a.phase==='funded'     ? '<span style="color:var(--green)">✅ Fondeada</span>'
+               :                          '<span style="color:var(--red)">🔥 Quemada</span>';
+    const costoCell = a.cost_mxn
+      ? `<div class="dual-amount"><div class="main">${fmtUSD(a.cost_initial)}</div><div class="sub">${fmtMXN(a.cost_mxn)} · TC ${a.exchange_rate_purchase||'—'}</div></div>`
+      : fmtUSD(a.cost_initial);
+    const payCell = a.payment_processor
+      ? `<div>${payProcLabel(a.payment_processor)}</div><div style="font-size:10px;color:var(--muted);font-family:monospace">${a.payment_detail||''}</div>`
+      : '<span style="color:var(--faint)">—</span>';
+    const emailCell = a.operation_email
+      ? `<span style="font-size:11px;color:var(--muted)">${a.operation_email}</span>`
+      : '—';
+    return `<tr>
+      <td><strong>${a.firm}</strong><div style="font-size:11px;color:var(--muted)">#${a.account_number||'—'} · ${a.account_holder}</div>${emailCell}</td>
+      <td>${phaseBadge(a.phase)}</td><td>${typeBadge(a.account_type)}</td>
+      <td>${fmtUSD(a.account_size)}</td>
+      <td style="font-size:12px">${a.trading_traders?.name||'—'}</td>
+      <td>${prog}</td><td>${costoCell}</td>
+      <td style="font-size:12px">${payCell}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick='editCuenta(${JSON.stringify(a)})'>✏️</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModalEvento('${a.id}')">📝</button>
+        ${a.phase==='evaluation'?`<button class="btn btn-ghost btn-sm" onclick="openModalUpdatePnl('${a.id}','${a.firm}',${a.current_pnl||0})">📊</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<div class="table-card"><table>
+    <thead><tr><th>Cuenta</th><th>Fase</th><th>Tipo</th><th>Monto</th><th>Trader</th><th>Progreso</th><th>Costo</th><th>Cobro</th><th>Acciones</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+async function loadTraderFilter() {
+  const { data } = await sb.from('trading_traders').select('id,name').order('name');
+  allTraders = data||[];
+  const sel = document.getElementById('f-trader');
+  if (sel) sel.innerHTML='<option value="">Todos los traders</option>'+allTraders.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+}
+async function loadCuentasFilter() {
+  const { data } = await sb.from('trading_accounts').select('id,firm,account_size,account_number').order('firm');
+  const sel = document.getElementById('fm-cuenta');
+  if (sel) sel.innerHTML='<option value="">Todas las cuentas</option>'+(data||[]).map(a=>`<option value="${a.id}">${a.firm} ${fmtN(a.account_size)} #${a.account_number||'—'}</option>`).join('');
+}
+
+const payDetailLabel = p => ({wise:'📧 Correo de Wise',crypto:'🪙 Dirección de wallet (incluye red)',banco:'🏦 Datos bancarios destino',otro:'📌 Detalle del método'})[p]||'Detalle';
+const payDetailPlaceholder = p => ({wise:'nombre@wise.com',crypto:'0x... (Red: ERC-20)',banco:'CLABE o SWIFT + banco',otro:'Descripción'})[p]||'';
+const payProcLabel = p => ({wise:'💳 Wise',crypto:'🪙 Crypto',banco:'🏦 Banco',otro:'📌 Otro'})[p]||'—';
+
+function onPayProcChange() {
+  const p = document.getElementById('f-payproc')?.value;
+  const wrap = document.getElementById('f-paydetail-wrap');
+  const lbl  = document.getElementById('f-paydetail-label');
+  const inp  = document.getElementById('f-paydetail');
+  const clabeWrap = document.getElementById('f-payclabe-wrap');
+  if (wrap) wrap.style.display = p ? '' : 'none';
+  if (lbl)  lbl.textContent = payDetailLabel(p);
+  if (inp)  inp.placeholder  = payDetailPlaceholder(p);
+  if (clabeWrap) clabeWrap.style.display = (p && p!=='banco') ? '' : 'none';
+}
+
+async function openModalCuenta(data={}) {
+  const { data: traders } = await sb.from('trading_traders').select('id,name').order('name');
+  const trOpts = (traders||[]).map(t=>`<option value="${t.id}" ${data.trader_id===t.id?'selected':''}>${t.name}</option>`).join('');
+  setModal('Nueva cuenta de fondeo', `
+    <div class="field-row">
+      <div class="field"><label>Firma *</label><select id="f-firm">
+        <option value="">Seleccionar...</option>
+        ${['TopStep','Lucid','Apex','FundedNext','MyFundedFutures','Otra'].map(f=>`<option ${data.firm===f?'selected':''}>${f}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>Tipo *</label><select id="f-atype">
+        <option value="futures" ${data.account_type==='futures'?'selected':''}>Futuros</option>
+        <option value="cfd" ${data.account_type==='cfd'?'selected':''}>CFD</option>
+      </select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Titular *</label><input id="f-holder" value="${data.account_holder||''}" placeholder="Nombre del titular"></div>
+      <div class="field"><label>Trader que gestiona</label><select id="f-trader-sel"><option value="">Sin asignar</option>${trOpts}</select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Monto de la cuenta *</label><input id="f-size" type="number" value="${data.account_size||''}" placeholder="50000"></div>
+      <div class="field"><label>Número de cuenta</label><input id="f-accnum" value="${data.account_number||''}" placeholder="Ej: 4729771"></div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">💳 Costo de la cuenta</div>
+      <div class="field-row3">
+        <div class="field" style="margin:0"><label>Costo USD</label><input id="f-cost" type="number" value="${data.cost_initial||''}" placeholder="85"></div>
+        <div class="field" style="margin:0"><label>Cargo tarjeta MXN</label><input id="f-costmxn" type="number" value="${data.cost_mxn||''}" placeholder="1,530"></div>
+        <div class="field" style="margin:0"><label>TC al comprar</label><input id="f-tcpurchase" type="number" value="${data.exchange_rate_purchase||''}" placeholder="17.50" step="0.01"></div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Fee mensual USD</label><input id="f-mfee" type="number" value="${data.monthly_fee||''}" placeholder="85"></div>
+      <div class="field"><label>Fase actual</label><select id="f-phase" onchange="document.getElementById('f-funded-wrap').style.display=this.value==='funded'?'':'none'">
+        <option value="evaluation" ${!data.phase||data.phase==='evaluation'?'selected':''}>Evaluación</option>
+        <option value="funded" ${data.phase==='funded'?'selected':''}>Fondeada</option>
+        <option value="burned" ${data.phase==='burned'?'selected':''}>Quemada</option>
+      </select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Profit target USD</label><input id="f-target" type="number" value="${data.profit_target||''}" placeholder="3000"></div>
+      <div class="field"><label>Max Loss Limit USD</label><input id="f-mll" type="number" value="${data.max_loss_limit||''}" placeholder="2000"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>P&L actual</label><input id="f-pnl" type="number" value="${data.current_pnl||0}" placeholder="0"></div>
+      <div class="field"><label>Fecha de compra</label><input id="f-pdate" type="date" value="${data.purchase_date||''}" onclick="this.showPicker()"></div>
+    </div>
+    <div class="field-row" id="f-funded-wrap" style="${data.phase==='funded'?'':'display:none'}">
+      <div class="field"><label>📅 Fecha en que pasó (funded)</label><input id="f-funded-date" type="date" value="${data.funded_date||''}" onclick="this.showPicker()">
+        <div style="font-size:10px;color:var(--faint);margin-top:4px">Necesario para calcular días promedio para pasar</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:16px 0 10px;border-top:1px solid var(--border2);padding-top:14px">💳 Operación y cobro</div>
+    <div class="field"><label>Correo con que se gestiona esta cuenta</label>
+      <input id="f-opemail" type="email" value="${data.operation_email||''}" placeholder="correo@ejemplo.com">
+      <div style="font-size:10px;color:var(--faint);margin-top:4px">Email de acceso a la plataforma de la prop firm</div>
+    </div>
+    <div class="field"><label>Procesador de pago (cobro de payouts)</label>
+      <select id="f-payproc" onchange="onPayProcChange()">
+        <option value="">Sin definir</option>
+        <option value="wise" ${data.payment_processor==='wise'?'selected':''}>💳 Wise</option>
+        <option value="crypto" ${data.payment_processor==='crypto'?'selected':''}>🪙 Crypto</option>
+        <option value="banco" ${data.payment_processor==='banco'?'selected':''}>🏦 Transferencia bancaria</option>
+        <option value="otro" ${data.payment_processor==='otro'?'selected':''}>📌 Otro</option>
+      </select>
+    </div>
+    <div id="f-paydetail-wrap" style="${data.payment_processor?'':'display:none'}">
+      <div class="field">
+        <label id="f-paydetail-label">${payDetailLabel(data.payment_processor)}</label>
+        <input id="f-paydetail" value="${data.payment_detail||''}" placeholder="${payDetailPlaceholder(data.payment_processor)}" style="font-family:monospace">
+      </div>
+      <div class="field" id="f-payclabe-wrap" style="${data.payment_processor&&data.payment_processor!=='banco'?'':'display:none'}">
+        <label>🇲🇽 CLABE destino final (para transferir a México)</label>
+        <input id="f-payclabe" value="${data.payment_clabe||''}" placeholder="18 dígitos" style="font-family:monospace" maxlength="18">
+        <div style="font-size:10px;color:var(--faint);margin-top:4px">Después de recibir en Wise/Crypto, transferir a esta CLABE</div>
+      </div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="f-notes">${data.notes||''}</textarea></div>
+    <div id="form-err"></div>`,
+  [{ label: data.id?'Guardar':'Crear cuenta', cls:'btn-blue', fn:`saveCuenta('${data.id||''}')` },
+   { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+}
+
+function editCuenta(data) { openModalCuenta(data); }
+
+async function saveCuenta(id) {
+  const payload = {
+    firm:data_v('f-firm'), account_type:data_v('f-atype'),
+    account_holder:data_v('f-holder'), trader_id:data_v('f-trader-sel')||null,
+    account_size:num('f-size'), account_number:data_v('f-accnum')||null,
+    cost_initial:num('f-cost')||0, cost_mxn:num('f-costmxn')||null,
+    exchange_rate_purchase:num('f-tcpurchase')||null,
+    monthly_fee:num('f-mfee')||0, profit_target:num('f-target')||null,
+    max_loss_limit:num('f-mll')||null, purchase_date:data_v('f-pdate')||null,
+    funded_date:data_v('f-funded-date')||null,
+    phase:data_v('f-phase'), current_pnl:num('f-pnl')||0,
+    operation_email:data_v('f-opemail')||null,
+    payment_processor:data_v('f-payproc')||null,
+    payment_detail:data_v('f-paydetail')||null,
+    payment_clabe:data_v('f-payclabe')||null,
+    notes:data_v('f-notes')||null,
+  };
+  if (!payload.firm||!payload.account_holder||!payload.account_size) {
+    document.getElementById('form-err').innerHTML='<div class="alert alert-red">Completa Firma, Titular y Monto</div>'; return; }
+  const { error } = id ? await sb.from('trading_accounts').update(payload).eq('id',id) : await sb.from('trading_accounts').insert(payload);
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
+  closeModal(); loadCuentas();
+}
+
+function openModalUpdatePnl(id, firm, currentPnl) {
+  setModal(`Actualizar P&L — ${firm}`, `
+    <div class="field"><label>P&L actual (USD)</label><input id="pnl-val" type="number" value="${currentPnl||0}"></div>
+    <div id="form-err"></div>`,
+  [{ label:'Guardar', cls:'btn-blue', fn:`saveUpdatePnl('${id}')` }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+  setTimeout(()=>document.getElementById('pnl-val')?.select(),100);
+}
+async function saveUpdatePnl(id) {
+  const val = Number(document.getElementById('pnl-val').value);
+  const { error } = await sb.from('trading_accounts').update({ current_pnl:val }).eq('id',id);
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
+  closeModal(); loadDashboard();
+  if(document.getElementById('page-cuentas').classList.contains('active')) loadCuentas();
+}
+
+// ══════════════════════════════════════
+// MOVIMIENTOS
+// ══════════════════════════════════════
+async function loadMovimientos() {
+  const el = document.getElementById('movimientos-content');
+  el.innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
+  let q = sb.from('trading_events').select('*,trading_accounts(firm,account_size,account_number)').order('event_date',{ascending:false});
+  const tipo=document.getElementById('fm-tipo')?.value, cuenta=document.getElementById('fm-cuenta')?.value;
+  if (tipo)   q=q.eq('event_type',tipo);
+  if (cuenta) q=q.eq('account_id',cuenta);
+  const { data } = await q;
+  const evts = data||[];
+  if (!evts.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">📝</div>Sin movimientos.</div>'; return; }
+  const rows = evts.map(e=>{
+    const acc=e.trading_accounts;
+    const isIn=e.event_type==='payout';
+    const col=isIn?'var(--green)':'var(--red)';
+    const sign=isIn?'+':'-';
+    const cur=e.currency||'USD';
+    const amtMain = cur==='MXN' ? `${sign}${fmtMXN(Math.abs(e.amount))}` : `${sign}${fmtUSD(Math.abs(e.amount))}`;
+    const amtSub  = cur==='MXN' && e.amount_usd ? `≈ ${fmtUSD(e.amount_usd)}` : (cur==='USD' && e.amount_usd&&e.exchange_rate ? `≈ ${fmtMXN(e.amount_usd)}` : '');
+    const receiptBtn = e.receipt_url
+      ? `<a href="${e.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" title="Ver comprobante">📎</a>`
+      : '';
+    return `<tr>
+      <td>${fmtDate(e.event_date)}</td>
+      <td>${eventLabel(e.event_type)}</td>
+      <td>${acc?`${acc.firm} ${fmtN(acc.account_size)}<span style="color:var(--muted);font-size:11px"> #${acc.account_number||'—'}</span>`:'—'}</td>
+      <td>${curBadge(cur)}</td>
+      <td><div style="color:${col};font-weight:700">${amtMain}</div>${amtSub?`<div style="font-size:10px;color:var(--muted)">${amtSub}</div>`:''}</td>
+      <td style="color:var(--muted);font-size:12px">${e.notes||'—'}</td>
+      <td style="white-space:nowrap">${receiptBtn}${delBtn(`deleteEvento('${e.id}')`)}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<div class="table-card"><table>
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Moneda</th><th>Monto</th><th>Notas</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+async function openModalEvento(preAccountId='') {
+  const [{ data: accs }, { data: traders }] = await Promise.all([
+    sb.from('trading_accounts').select('id,firm,account_size,account_number,phase,trader_id').order('firm'),
+    sb.from('trading_traders').select('id,name,nickname').order('name'),
+  ]);
+  const allAccs = accs||[], allTrs = traders||[];
+
+  // Si viene con cuenta preseleccionada, detectamos su trader
+  let preTrader = '';
+  if (preAccountId) {
+    const found = allAccs.find(a=>a.id===preAccountId);
+    if (found) preTrader = found.trader_id||'';
+  }
+
+  const traderOpts = [
+    `<option value="">Todas las cuentas</option>`,
+    ...allTrs.map(t=>`<option value="${t.id}" ${preTrader===t.id?'selected':''}>${t.name}${t.nickname?' (@'+t.nickname+')':''}</option>`)
+  ].join('');
+
+  function accOpts(traderId) {
+    const filtered = traderId ? allAccs.filter(a=>a.trader_id===traderId) : allAccs;
+    if (!filtered.length) return '<option value="">— Sin cuentas —</option>';
+    return '<option value="">Seleccionar cuenta...</option>' + filtered.map(a=>{
+      const phase = a.phase==='burned'?' 🔥':a.phase==='funded'?' ✅':'';
+      return `<option value="${a.id}" ${preAccountId===a.id?'selected':''}>${a.firm} ${fmtN(a.account_size)} #${a.account_number||'—'}${phase}</option>`;
+    }).join('');
+  }
+
+  setModal('Registrar movimiento', `
+    <div class="field-row">
+      <div class="field"><label>Trader</label>
+        <select id="ev-trader" onchange="filterEvAccounts()">
+          ${traderOpts}
+        </select>
+      </div>
+      <div class="field"><label>Cuenta *</label>
+        <select id="ev-acc">${accOpts(preTrader)}</select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Tipo *</label><select id="ev-type" onchange="onEvTypeChange()">
+        <option value="payout">💸 Payout (cobro)</option>
+        <option value="burn">🔥 Quema</option>
+        <option value="monthly_fee">📅 Fee mensual</option>
+        <option value="activation_fee">🏷️ Fee activación</option>
+        <option value="other">📌 Otro</option>
+      </select></div>
+      <div class="field"><label>Monto *</label><input id="ev-amount" type="number" placeholder="0" oninput="calcPreview('ev')"></div>
+    </div>
+    ${curToggleHTML('ev','USD')}
+    <div class="field"><label>Fecha *</label><input id="ev-date" type="date" value="${new Date().toISOString().split('T')[0]}" onclick="this.showPicker()"></div>
+    <div class="field"><label>Notas</label><textarea id="ev-notes" placeholder="Descripción..."></textarea></div>
+    ${fileUploadHTML('ev')}
+    <div id="form-err"></div>`,
+  [{ label:'Registrar', cls:'btn-blue', fn:'saveEvento()' }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+
+  // Guardamos las cuentas en closure para filtrar sin nueva consulta
+  window._evAllAccs = allAccs;
+}
+
+function filterEvAccounts() {
+  const traderId = document.getElementById('ev-trader')?.value;
+  const accs = window._evAllAccs||[];
+  const filtered = traderId ? accs.filter(a=>a.trader_id===traderId) : accs;
+  const sel = document.getElementById('ev-acc');
+  if (!sel) return;
+  if (!filtered.length) { sel.innerHTML='<option value="">— Sin cuentas —</option>'; return; }
+  sel.innerHTML = '<option value="">Seleccionar cuenta...</option>' + filtered.map(a=>{
+    const phase = a.phase==='burned'?' 🔥':a.phase==='funded'?' ✅':'';
+    return `<option value="${a.id}">${a.firm} ${fmtN(a.account_size)} #${a.account_number||'—'}${phase}</option>`;
+  }).join('');
+}
+
+function onEvTypeChange() {
+  const t = document.getElementById('ev-type')?.value;
+  const isFeeMXN = ['monthly_fee','activation_fee'].includes(t);
+  if (isFeeMXN) setCur('ev','MXN'); else setCur('ev','USD');
+}
+async function saveEvento() {
+  const account_id = data_v('ev-acc'), event_type = data_v('ev-type');
+  const amount = num('ev-amount'), event_date = data_v('ev-date'), notes = data_v('ev-notes');
+  const currency = getCur('ev'), rate = num('ev-rate');
+  const amount_usd = toUSD(amount, currency, rate||17.5);
+  if (!account_id||!amount||!event_date) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Completa cuenta, monto y fecha</div>'; return; }
+  const receipt_url = await uploadReceipt('ev', 'movimientos');
+  const { error } = await sb.from('trading_events').insert({ account_id, event_type, amount, event_date, notes:notes||null, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url });
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
+  if (event_type==='burn') await sb.from('trading_accounts').update({ phase:'burned', burned_date:event_date }).eq('id',account_id);
+  closeModal(); loadMovimientos();
+}
+async function deleteEvento(id) {
+  if (!canDelete()) return;
+  if (!confirm('¿Eliminar este movimiento?')) return;
+  await sb.from('trading_events').delete().eq('id',id); loadMovimientos();
+}
+
+// ══════════════════════════════════════
+// CAPITAL — INGRESOS
+// ══════════════════════════════════════
+async function loadIngresos() {
+  const el = document.getElementById('ingresos-content');
+  const { data } = await sb.from('trading_income').select('*').order('income_date',{ascending:false});
+  const items = data||[];
+  const totalMXN = items.filter(i=>i.currency==='MXN'||!i.currency).reduce((s,i)=>s+Number(i.amount),0);
+  const totalUSD = items.filter(i=>i.currency==='USD').reduce((s,i)=>s+Number(i.amount),0);
+  if (!items.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">💵</div>Sin ingresos.</div>'; return; }
+  const rows = items.map(i=>{
+    const cur=i.currency||'MXN';
+    const mainAmt = cur==='MXN' ? fmtMXN(i.amount) : fmtUSD(i.amount);
+    const subAmt  = cur==='MXN' && i.amount_usd ? `≈ ${fmtUSD(i.amount_usd)}` : (cur==='USD'&&i.amount_usd ? `≈ ${fmtMXN(i.amount_usd)}` : '');
+    return `<tr>
+      <td>${fmtDate(i.income_date)}</td>
+      <td style="font-size:12px">${sourceLabel(i.source_type)}</td>
+      <td>${i.contributor_name||'—'}</td>
+      <td>${curBadge(cur)}</td>
+      <td><div style="color:var(--green);font-weight:700">${mainAmt}</div>${subAmt?`<div style="font-size:10px;color:var(--muted)">${subAmt}</div>`:''}</td>
+      <td style="font-size:12px;color:var(--muted)">${i.description||'—'}</td>
+      <td style="white-space:nowrap">${i.receipt_url?`<a href="${i.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" title="Ver comprobante">📎</a>`:''}${delBtn(`deleteIngreso('${i.id}')`)}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<div class="table-card">
+    <div class="table-card-header">
+      <h3>Total</h3>
+      <div>${totalMXN?`<span style="color:var(--green);font-weight:700">${fmtMXN(totalMXN)}</span> `:''} ${totalUSD?`<span style="color:var(--blue);font-weight:700">${fmtUSD(totalUSD)}</span>`:''}</div>
+    </div>
+    <table><thead><tr><th>Fecha</th><th>Tipo</th><th>De quién</th><th>Moneda</th><th>Monto</th><th>Descripción</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function openModalIngreso() {
+  setModal('Registrar ingreso de capital', `
+    <div class="field-row">
+      <div class="field"><label>Tipo de ingreso *</label><select id="in-type">
+        <option value="empresa">🏢 Empresa</option>
+        <option value="aportacion_personal">👤 Aportación personal</option>
+        <option value="aportacion_tercero">🤝 Aportación de tercero</option>
+      </select></div>
+      <div class="field"><label>Monto *</label><input id="in-amount" type="number" placeholder="0" oninput="calcPreview('in')"></div>
+    </div>
+    ${curToggleHTML('in','MXN')}
+    <div class="field-row">
+      <div class="field"><label>Nombre / Origen</label><input id="in-name" placeholder="Quién aporta o empresa"></div>
+      <div class="field"><label>Fecha *</label><input id="in-date" type="date" value="${new Date().toISOString().split('T')[0]}" onclick="this.showPicker()"></div>
+    </div>
+    <div class="field"><label>Descripción</label><textarea id="in-desc" placeholder="De dónde viene..."></textarea></div>
+    ${fileUploadHTML('in')}
+    <div id="form-err"></div>`,
+  [{ label:'Registrar', cls:'btn-blue', fn:'saveIngreso()' }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+}
+async function saveIngreso() {
+  const source_type=data_v('in-type'), amount=num('in-amount'), income_date=data_v('in-date');
+  const contributor_name=data_v('in-name'), description=data_v('in-desc');
+  const currency=getCur('in'), rate=num('in-rate');
+  const amount_usd = toUSD(amount, currency, rate||17.5);
+  if (!amount||!income_date) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Monto y fecha son requeridos</div>'; return; }
+  const receipt_url = await uploadReceipt('in', 'ingresos');
+  const { error } = await sb.from('trading_income').insert({ source_type, amount, income_date, contributor_name:contributor_name||null, description:description||null, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url });
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
+  closeModal(); loadIngresos();
+}
+async function deleteIngreso(id) {
+  if (!canDelete()) return;
+  if (!confirm('¿Eliminar este ingreso?')) return;
+  await sb.from('trading_income').delete().eq('id',id); loadIngresos();
+}
+
+// ══════════════════════════════════════
+// CAPITAL — GASTOS
+// ══════════════════════════════════════
+async function loadGastos() {
+  const el = document.getElementById('gastos-content');
+  const { data } = await sb.from('trading_expenses').select('*').order('expense_date',{ascending:false});
+  const items = data||[];
+  const totalMXN = items.filter(i=>i.currency==='MXN'||!i.currency).reduce((s,i)=>s+Number(i.amount),0);
+  const totalUSD = items.filter(i=>i.currency==='USD').reduce((s,i)=>s+Number(i.amount),0);
+  if (!items.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🧾</div>Sin gastos.</div>'; return; }
+  const rows = items.map(i=>{
+    const cur=i.currency||'MXN';
+    const mainAmt = cur==='MXN' ? fmtMXN(i.amount) : fmtUSD(i.amount);
+    const subAmt  = cur==='MXN'&&i.amount_usd ? `≈ ${fmtUSD(i.amount_usd)}` : '';
+    const receiptBtn = i.receipt_url
+      ? `<a href="${i.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" title="Ver comprobante">📎</a>`
+      : '';
+    return `<tr>
+      <td>${fmtDate(i.expense_date)}</td>
+      <td style="font-size:12px">${catLabel(i.category)}</td>
+      <td>${curBadge(cur)}</td>
+      <td><div style="color:var(--red);font-weight:700">-${mainAmt}</div>${subAmt?`<div style="font-size:10px;color:var(--muted)">${subAmt}</div>`:''}</td>
+      <td style="font-size:12px;color:var(--muted)">${i.description}</td>
+      <td style="white-space:nowrap">${receiptBtn}${delBtn(`deleteGasto('${i.id}')`)}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML=`<div class="table-card">
+    <div class="table-card-header">
+      <h3>Total</h3>
+      <div>${totalMXN?`<span style="color:var(--red);font-weight:700">-${fmtMXN(totalMXN)}</span> `:''} ${totalUSD?`<span style="color:var(--red);font-weight:700">-${fmtUSD(totalUSD)}</span>`:''}</div>
+    </div>
+    <table><thead><tr><th>Fecha</th><th>Categoría</th><th>Moneda</th><th>Monto</th><th>Descripción</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function openModalGasto() {
+  setModal('Registrar gasto general', `
+    <div class="field"><label>Categoría *</label><select id="ga-cat">
+      <option value="tablet">📱 Tablet</option>
+      <option value="computadora">💻 Computadora</option>
+      <option value="modem">📡 Modem</option>
+      <option value="sim">📶 SIM / Línea</option>
+      <option value="suscripcion">🔄 Suscripción</option>
+      <option value="servicio">⚙️ Servicio</option>
+      <option value="otro">📦 Otro</option>
+    </select></div>
+    <div class="field"><label>Descripción *</label><input id="ga-desc" placeholder="Ej: Modem Telcel plan 200GB, Tablet Samsung A8..."></div>
+    <div class="field-row">
+      <div class="field"><label>Monto *</label><input id="ga-amount" type="number" placeholder="0" oninput="calcPreview('ga')"></div>
+      <div class="field"><label>Fecha *</label><input id="ga-date" type="date" value="${new Date().toISOString().split('T')[0]}" onclick="this.showPicker()"></div>
+    </div>
+    ${curToggleHTML('ga','MXN')}
+    ${fileUploadHTML('ga')}
+    <div id="form-err"></div>`,
+  [{ label:'Registrar', cls:'btn-blue', fn:'saveGasto()' }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+}
+async function saveGasto() {
+  const category=data_v('ga-cat'), amount=num('ga-amount'), description=data_v('ga-desc'), expense_date=data_v('ga-date');
+  const currency=getCur('ga'), rate=num('ga-rate');
+  const amount_usd = toUSD(amount, currency, rate||17.5);
+  if (!amount||!description||!expense_date) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Todos los campos son requeridos</div>'; return; }
+  const receipt_url = await uploadReceipt('ga', 'gastos');
+  const { error } = await sb.from('trading_expenses').insert({ category, amount, description, expense_date, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url });
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
+  closeModal(); loadGastos();
+}
+async function deleteGasto(id) {
+  if (!canDelete()) return;
+  if (!confirm('¿Eliminar este gasto?')) return;
+  await sb.from('trading_expenses').delete().eq('id',id); loadGastos();
+}
+
+// ══════════════════════════════════════
+// TRADERS
+// ══════════════════════════════════════
+async function loadTraders() {
+  const el = document.getElementById('traders-content');
+  el.innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
+  const { data: traders } = await sb.from('trading_traders').select('*').order('name');
+  const { data: accounts } = await sb.from('trading_accounts').select('id,trader_id,firm,account_size,account_number,phase');
+  const ts=traders||[], ac=accounts||[];
+  if (!ts.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">👥</div>Sin traders. Agrega el primero.</div>'; return; }
+  el.innerHTML = ts.map(t=>{
+    const myAccs = ac.filter(a=>a.trader_id===t.id);
+    const accsHTML = myAccs.length ? myAccs.map(a=>`
+      <span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11px;margin:2px">
+        ${a.firm} ${fmtN(a.account_size)} <span style="color:var(--muted)">#${a.account_number||'—'}</span> ${phaseBadge(a.phase)}
+      </span>`).join('') : '<span style="color:var(--faint);font-size:12px">Sin cuentas asignadas</span>';
+    return `<div class="table-card" style="margin-bottom:14px">
+      <div class="table-card-header">
+        <div><strong style="font-size:15px">${t.name}</strong>
+          ${t.nickname?`<span style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:2px 8px;font-size:11px;font-family:monospace;color:var(--blue);margin-left:8px">@${t.nickname}</span>`:''}
+          ${t.email?`<span style="color:var(--muted);font-size:12px;margin-left:8px">${t.email}</span>`:''}
+          ${t.phone?`<span style="color:var(--muted);font-size:12px;margin-left:8px">📱 ${t.phone}</span>`:''}
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick='editTrader(${JSON.stringify(t)})'>✏️ Editar</button>
+          ${delBtn(`deleteTrader('${t.id}')`)}
+        </div>
+      </div>
+      <div style="padding:12px 18px">
+        ${(t.bank_name||t.clabe)?`<div style="display:flex;gap:16px;align-items:center;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+          <span style="font-size:12px">🏦 ${t.bank_name||'—'}</span>
+          ${t.clabe?`<span style="font-family:monospace;font-size:12px;color:var(--blue);letter-spacing:1px">${t.clabe}</span>`:'<span style="color:var(--faint);font-size:11px">CLABE no registrada</span>'}
+        </div>`:''}
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Cuentas que gestiona (${myAccs.length})</div>
+        <div>${accsHTML}</div>
+        ${t.notes?`<div style="margin-top:10px;font-size:12px;color:var(--muted);border-top:1px solid var(--border2);padding-top:8px">${t.notes}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+const MX_BANKS = ['BBVA Bancomer','Citibanamex','Banorte','HSBC','Santander','Scotiabank','Inbursa','Azteca','BanBajío','Afirme','Multiva','Nu México','Mercado Pago','Spin by OXXO','Otro'];
+
+function openModalTrader(data={}) {
+  const bankOpts = MX_BANKS.map(b=>`<option ${data.bank_name===b?'selected':''}>${b}</option>`).join('');
+  setModal(data.id?'Editar trader':'Nuevo trader', `
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Datos básicos *</div>
+    <div class="field-row">
+      <div class="field"><label>Nombre completo *</label><input id="tr-name" value="${data.name||''}" placeholder="Nombre del trader"></div>
+      <div class="field"><label>Nickname *</label>
+        <input id="tr-nick" value="${data.nickname||''}" placeholder="traderpardo" style="font-family:monospace;">
+        <div style="font-size:10px;color:var(--faint);margin-top:4px">Alias único elegido por el trader</div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Correo *</label><input id="tr-email" type="email" value="${data.email||''}" placeholder="correo@email.com"></div>
+      <div class="field"><label>Teléfono *</label><input id="tr-phone" value="${data.phone||''}" placeholder="+52 55 XXXX XXXX"></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:16px 0 10px;border-top:1px solid var(--border2);padding-top:14px">🏦 Cuenta bancaria (para depósitos)</div>
+    <div class="field-row">
+      <div class="field"><label>Banco</label>
+        <select id="tr-bank"><option value="">Seleccionar banco...</option>${bankOpts}</select>
+      </div>
+      <div class="field"><label>CLABE interbancaria</label>
+        <input id="tr-clabe" value="${data.clabe||''}" placeholder="18 dígitos" style="font-family:monospace;" maxlength="18">
+      </div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="tr-notes">${data.notes||''}</textarea></div>
+    <div id="form-err"></div>`,
+  [{ label:data.id?'Guardar':'Crear trader', cls:'btn-blue', fn:`saveTrader('${data.id||''}')` },
+   { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+}
+function editTrader(data) { openModalTrader(data); }
+async function saveTrader(id) {
+  const name=data_v('tr-name'), nickname=data_v('tr-nick'), email=data_v('tr-email'), phone=data_v('tr-phone');
+  const clabe=data_v('tr-clabe'), bank_name=data_v('tr-bank'), notes=data_v('tr-notes');
+  if (!name||!nickname||!email||!phone) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Nombre, nickname, correo y teléfono son requeridos</div>'; return; }
+  const payload={ name, nickname, email, phone, clabe:clabe||null, bank_name:bank_name||null, notes:notes||null };
+  const { error } = id ? await sb.from('trading_traders').update(payload).eq('id',id) : await sb.from('trading_traders').insert(payload);
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
+  closeModal(); loadTraders();
+}
+async function deleteTrader(id) {
+  if (!canDelete()) return;
+  if (!confirm('¿Eliminar este trader?')) return;
+  await sb.from('trading_traders').delete().eq('id',id); loadTraders();
+}
+
+// ══════════════════════════════════════
+// RENDIMIENTO POR TRADER
+// ══════════════════════════════════════
+async function loadRendimiento() {
+  const el = document.getElementById('rendimiento-content');
+  el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
+
+  const [{ data: traders }, { data: accounts }, { data: events }] = await Promise.all([
+    sb.from('trading_traders').select('*').order('name'),
+    sb.from('trading_accounts').select('*'),
+    sb.from('trading_events').select('*'),
+  ]);
+  const trs = traders||[], accs = accounts||[], evts = events||[];
+
+  if (!trs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">👥</div>No hay traders registrados.</div>'; return; }
+
+  // Calcular stats por trader
+  const stats = trs.map(t => {
+    const myAccs   = accs.filter(a => a.trader_id === t.id);
+    const myIds    = new Set(myAccs.map(a => a.id));
+    const myEvts   = evts.filter(e => myIds.has(e.account_id));
+
+    const evalAccs   = myAccs.filter(a => a.phase === 'evaluation');
+    const fundedAccs = myAccs.filter(a => a.phase === 'funded');
+    const burnedAccs = myAccs.filter(a => a.phase === 'burned');
+    const completed  = new Set([...fundedAccs, ...burnedAccs].map(a => a.id));
+
+    const payouts    = myEvts.filter(e => e.event_type === 'payout').reduce((s,e) => s + Number(e.amount_usd||e.amount||0), 0);
+    const costReal   = [...fundedAccs,...burnedAccs].reduce((s,a) => s + Number(a.cost_initial||0), 0);
+    const feesReal   = myEvts.filter(e => ['monthly_fee','activation_fee'].includes(e.event_type) && completed.has(e.account_id))
+                             .reduce((s,e) => s + Number(e.amount_usd||e.amount||0), 0);
+    const invested   = costReal + feesReal;
+    const enJuego    = evalAccs.reduce((s,a) => s + Number(a.cost_initial||0), 0);
+    const netPL      = payouts - invested;
+    const rent       = invested > 0 ? ((netPL / invested) * 100) : null;
+    const tasaExito  = (completed.size > 0) ? ((fundedAccs.length / completed.size) * 100) : null;
+
+    // Días promedio para pasar
+    const conDias = fundedAccs.filter(a => a.funded_date && a.purchase_date);
+    const promDias = conDias.length > 0
+      ? Math.round(conDias.reduce((s,a) => s + daysBetween(a.purchase_date, a.funded_date), 0) / conDias.length)
+      : null;
+
+    // Ganancia diaria promedio en evals activas
+    const evalConPnl = evalAccs.filter(a => a.current_pnl > 0 && a.purchase_date);
+    const ganDiaria  = evalConPnl.length > 0
+      ? evalConPnl.reduce((s,a) => s + Number(a.current_pnl) / (daysBetween(a.purchase_date)||1), 0) / evalConPnl.length
+      : null;
+
+    return { t, myAccs, evalAccs, fundedAccs, burnedAccs, payouts, invested, enJuego, netPL, rent, tasaExito, promDias, ganDiaria };
+  });
+
+  // Ranking por rentabilidad (los que tienen datos primero, luego sin datos)
+  const ranked = [...stats].sort((a,b) => {
+    if (a.rent === null && b.rent === null) return b.payouts - a.payouts;
+    if (a.rent === null) return 1;
+    if (b.rent === null) return -1;
+    return b.rent - a.rent;
+  });
+
+  // ── RANKING TABLE ──
+  const rankMedal = i => ['🥇','🥈','🥉'][i] || `#${i+1}`;
+  const rankRows = ranked.map((s, i) => {
+    const netCol = s.netPL >= 0 ? 'var(--green)' : 'var(--red)';
+    const rentTxt = s.rent !== null ? (s.rent >= 0 ? '+' : '') + s.rent.toFixed(1) + '%' : '—';
+    const rentCol = s.rent === null ? 'var(--muted)' : s.rent >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<tr>
+      <td><span style="font-size:18px">${rankMedal(i)}</span></td>
+      <td>
+        <strong>${s.t.name}</strong>
+        ${s.t.nickname ? `<span style="font-family:monospace;color:var(--blue);font-size:11px;margin-left:6px">@${s.t.nickname}</span>` : ''}
+      </td>
+      <td>${fmtUSD(s.payouts)}</td>
+      <td>${fmtUSD(s.invested)}</td>
+      <td style="color:${netCol};font-weight:700">${s.netPL >= 0 ? '+' : ''}${fmtUSD(s.netPL)}</td>
+      <td style="color:${rentCol};font-weight:700;font-size:16px">${rentTxt}</td>
+      <td>${s.tasaExito !== null ? s.tasaExito.toFixed(0) + '%' : '—'}</td>
+      <td>${s.myAccs.length} <span style="color:var(--muted);font-size:11px">(${s.evalAccs.length}eval · ${s.fundedAccs.length}fund · ${s.burnedAccs.length}burn)</span></td>
+    </tr>`;
+  }).join('');
+
+  // ── TARJETAS INDIVIDUALES ──
+  const traderCards = ranked.map((s, i) => {
+    const netCol  = s.netPL >= 0 ? 'green' : 'red';
+    const rentCol = s.rent === null ? 'blue' : s.rent >= 0 ? 'green' : 'red';
+    const tasaCol = s.tasaExito === null ? 'blue' : s.tasaExito >= 50 ? 'green' : 'red';
+
+    // Eval progress en esta tarjeta
+    const evalRows = s.evalAccs.length ? s.evalAccs.map(a => `
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+          <span><strong>${a.firm}</strong> ${fmtN(a.account_size)} <span style="color:var(--muted)">#${a.account_number||'—'}</span></span>
+          <span style="color:var(--muted)">${a.purchase_date ? daysBetween(a.purchase_date) + 'd' : '—'}</span>
+        </div>
+        ${progressBar(Number(a.current_pnl||0), Number(a.profit_target), Number(a.max_loss_limit))}
+      </div>`).join('') : '<div style="color:var(--faint);font-size:12px">Sin cuentas en evaluación</div>';
+
+    // Últimos 5 movimientos del trader
+    const myEvts = evts.filter(e => new Set(s.myAccs.map(a=>a.id)).has(e.account_id));
+    const recent = [...myEvts].sort((a,b) => new Date(b.event_date)-new Date(a.event_date)).slice(0,5);
+    const recentRows = recent.length ? recent.map(e => {
+      const acc  = s.myAccs.find(a => a.id === e.account_id);
+      const isIn = e.event_type === 'payout';
+      const col  = isIn ? 'var(--green)' : 'var(--red)';
+      const cur  = e.currency || 'USD';
+      const amt  = cur==='MXN' ? fmtMXN(e.amount) : fmtUSD(e.amount);
+      return `<tr>
+        <td>${fmtDate(e.event_date)}</td>
+        <td>${eventLabel(e.event_type)}</td>
+        <td style="font-size:11px;color:var(--muted)">${acc ? acc.firm+' '+fmtN(acc.account_size) : '—'}</td>
+        <td style="color:${col};font-weight:700">${isIn?'+':'-'}${amt}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="4"><div style="color:var(--faint);font-size:12px;padding:8px">Sin movimientos</div></td></tr>';
+
+    return `
+    <div class="table-card" style="margin-bottom:20px">
+      <div class="table-card-header">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:24px">${rankMedal(i)}</span>
+          <div>
+            <strong style="font-size:16px">${s.t.name}</strong>
+            ${s.t.nickname ? `<span style="font-family:monospace;color:var(--blue);font-size:12px;margin-left:8px">@${s.t.nickname}</span>` : ''}
+            ${s.t.email ? `<span style="color:var(--muted);font-size:11px;margin-left:8px">${s.t.email}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div style="padding:16px 18px">
+        <div class="stats-grid" style="grid-template-columns:repeat(6,1fr);margin-bottom:16px">
+          <div class="stat-card blue" style="padding:12px"><div class="s-label">Invertido</div><div class="s-val" style="font-size:16px">${fmtUSD(s.invested)}</div><div class="s-sub">Cuentas term.</div></div>
+          <div class="stat-card green" style="padding:12px"><div class="s-label">Cobrado</div><div class="s-val" style="font-size:16px">${fmtUSD(s.payouts)}</div><div class="s-sub">Payouts</div></div>
+          <div class="stat-card ${netCol}" style="padding:12px"><div class="s-label">P&L Neto</div><div class="s-val" style="font-size:16px">${s.netPL>=0?'+':''}${fmtUSD(s.netPL)}</div></div>
+          <div class="stat-card ${rentCol}" style="padding:12px"><div class="s-label">Rentabilidad</div><div class="s-val" style="font-size:16px">${s.rent!==null?(s.rent>=0?'+':'')+s.rent.toFixed(1)+'%':'—'}</div></div>
+          <div class="stat-card ${tasaCol}" style="padding:12px"><div class="s-label">Tasa éxito</div><div class="s-val" style="font-size:16px">${s.tasaExito!==null?s.tasaExito.toFixed(0)+'%':'—'}</div><div class="s-sub">${s.fundedAccs.length}/${s.evalAccs.length+s.fundedAccs.length+s.burnedAccs.length}</div></div>
+          <div class="stat-card yellow" style="padding:12px"><div class="s-label">En juego</div><div class="s-val" style="font-size:16px">${fmtUSD(s.enJuego)}</div><div class="s-sub">Evals activas</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📈 Cuentas en evaluación (${s.evalAccs.length})</div>
+            ${evalRows}
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">🕒 Últimos movimientos</div>
+            <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Monto</th></tr></thead>
+            <tbody>${recentRows}</tbody></table>
+          </div>
+        </div>
+        ${s.promDias!==null||s.ganDiaria!==null ? `
+        <div style="display:flex;gap:20px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border2)">
+          ${s.promDias!==null?`<span style="font-size:12px;color:var(--muted)">⏱ Días prom. para pasar: <strong style="color:var(--text)">${s.promDias}d</strong></span>`:''}
+          ${s.ganDiaria!==null?`<span style="font-size:12px;color:var(--muted)">📈 Ganancia diaria prom.: <strong style="color:var(--green)">$${s.ganDiaria.toFixed(0)}/día</strong></span>`:''}
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="section-divider">🏆 Ranking de traders — por rentabilidad</div>
+    <div class="table-card" style="margin-bottom:24px">
+      <table>
+        <thead><tr><th>#</th><th>Trader</th><th>Cobrado</th><th>Invertido</th><th>P&L Neto</th><th>Rentabilidad</th><th>Tasa éxito</th><th>Cuentas</th></tr></thead>
+        <tbody>${rankRows}</tbody>
+      </table>
+    </div>
+    <div class="section-divider">👤 Detalle por trader</div>
+    ${traderCards}`;
+}
+
+// ══════════════════════════════════════
+// EQUIPOS
+// ══════════════════════════════════════
+const eqTypeLabel  = t => ({modem:'📡 Modem',tablet:'📱 Tablet',computadora:'🖥️ Computadora',mac:'🍎 Mac'})[t]||t;
+const eqIdLabel    = t => ({modem:'IMEI',tablet:'TWEK',computadora:'Nombre del equipo',mac:'Número de serie'})[t]||'Identificador';
+const eqStatusLabel= s => ({active:'✅ Activo',returned:'↩️ Devuelto',lost:'⚠️ Extraviado'})[s]||s;
+const eqStatusColor= s => ({active:'var(--green)',returned:'var(--muted)',lost:'var(--orange)'})[s]||'var(--muted)';
+
+async function loadEquipoTraderFilter() {
+  const { data } = await sb.from('trading_traders').select('id,name,nickname').order('name');
+  const sel = document.getElementById('feq-trader');
+  if (sel) sel.innerHTML='<option value="">Todos los traders</option>'+(data||[]).map(t=>`<option value="${t.id}">${t.name}${t.nickname?' (@'+t.nickname+')':''}</option>`).join('');
+}
+
+async function loadEquipos() {
+  const el = document.getElementById('equipos-content');
+  el.innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
+  let q = sb.from('trading_equipment').select('*,trading_traders(name,nickname)').order('created_at',{ascending:false});
+  const trader=document.getElementById('feq-trader')?.value;
+  const type  =document.getElementById('feq-type')?.value;
+  const status=document.getElementById('feq-status')?.value;
+  if (trader) q=q.eq('trader_id',trader);
+  if (type)   q=q.eq('equipment_type',type);
+  if (status) q=q.eq('status',status);
+  const { data } = await q;
+  const items = data||[];
+  if (!items.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">💻</div>Sin equipos registrados.</div>'; return; }
+
+  // Agrupar por trader
+  const byTrader = {};
+  items.forEach(e=>{
+    const key = e.trader_id||'__sin_asignar__';
+    const name = e.trading_traders?.name || 'Sin trader asignado';
+    const nick = e.trading_traders?.nickname||'';
+    if (!byTrader[key]) byTrader[key]={ name, nick, items:[] };
+    byTrader[key].items.push(e);
+  });
+
+  el.innerHTML = Object.entries(byTrader).map(([tid, group])=>{
+    const rows = group.items.map(e=>`<tr>
+      <td>${eqTypeLabel(e.equipment_type)}</td>
+      <td>${e.brand||'—'} ${e.model||''}</td>
+      <td style="font-family:monospace;font-size:12px">${e.identifier||'—'}</td>
+      <td style="font-family:monospace;font-size:12px;color:var(--blue)">${e.phone_number||'—'}</td>
+      <td style="color:${eqStatusColor(e.status)}">${eqStatusLabel(e.status)}</td>
+      <td style="color:var(--muted);font-size:12px">${e.assigned_date?fmtDate(e.assigned_date):'—'}</td>
+      <td style="color:var(--muted);font-size:12px">${e.notes||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick='editEquipo(${JSON.stringify(e)})'>✏️</button>
+        ${delBtn(`deleteEquipo('${e.id}')`)}
+      </td>
+    </tr>`).join('');
+    return `<div class="table-card" style="margin-bottom:16px">
+      <div class="table-card-header">
+        <h3>👤 ${group.name}${group.nick?` <span style="font-family:monospace;color:var(--blue);font-size:12px">@${group.nick}</span>`:''}</h3>
+        <button class="btn btn-ghost btn-sm" onclick="openModalEquipo('${tid==='__sin_asignar__'?'':tid}')">+ Equipo</button>
+      </div>
+      <table>
+        <thead><tr><th>Tipo</th><th>Marca / Modelo</th><th>Identificador</th><th>N° línea SIM</th><th>Estado</th><th>Asignado</th><th>Notas</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+async function openModalEquipo(preTrader='', data={}) {
+  const { data: traders } = await sb.from('trading_traders').select('id,name,nickname').order('name');
+  const trOpts = (traders||[]).map(t=>`<option value="${t.id}" ${(preTrader===t.id||data.trader_id===t.id)?'selected':''}>${t.name}${t.nickname?' (@'+t.nickname+')':''}</option>`).join('');
+  const eqType = data.equipment_type||'modem';
+
+  setModal(data.id?'Editar equipo':'Agregar equipo', `
+    <div class="field-row">
+      <div class="field"><label>Trader asignado</label>
+        <select id="eq-trader"><option value="">Sin asignar</option>${trOpts}</select>
+      </div>
+      <div class="field"><label>Tipo de equipo *</label>
+        <select id="eq-type" onchange="onEqTypeChange()">
+          <option value="modem" ${eqType==='modem'?'selected':''}>📡 Modem</option>
+          <option value="tablet" ${eqType==='tablet'?'selected':''}>📱 Tablet</option>
+          <option value="computadora" ${eqType==='computadora'?'selected':''}>🖥️ Computadora</option>
+          <option value="mac" ${eqType==='mac'?'selected':''}>🍎 Mac</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Marca</label><input id="eq-brand" value="${data.brand||''}" placeholder="Netgear, Samsung, Dell..."></div>
+      <div class="field"><label>Modelo</label><input id="eq-model" value="${data.model||''}" placeholder="M6 Pro, A9, Inspiron..."></div>
+    </div>
+    <div class="field">
+      <label id="eq-id-label">${eqIdLabel(eqType)} *</label>
+      <input id="eq-identifier" value="${data.identifier||''}" placeholder="${eqType==='modem'?'353xxxxxxxxxx':eqType==='tablet'?'TWEK-XXXXX':eqType==='mac'?'CXXXXXXXX':'Nombre del equipo'}" style="font-family:monospace">
+    </div>
+    <div class="field" id="eq-phone-wrap" style="${eqType==='modem'?'':'display:none'}">
+      <label>📶 Número de línea SIM asignada</label>
+      <input id="eq-phone" value="${data.phone_number||''}" placeholder="55 XXXX XXXX" style="font-family:monospace">
+      <div style="font-size:10px;color:var(--faint);margin-top:4px">Número del chip instalado en el modem — independiente al teléfono del trader</div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Fecha de asignación</label><input id="eq-date" type="date" value="${data.assigned_date||new Date().toISOString().split('T')[0]}" onclick="this.showPicker()"></div>
+      <div class="field"><label>Estado</label>
+        <select id="eq-status">
+          <option value="active" ${!data.status||data.status==='active'?'selected':''}>✅ Activo</option>
+          <option value="returned" ${data.status==='returned'?'selected':''}>↩️ Devuelto</option>
+          <option value="lost" ${data.status==='lost'?'selected':''}>⚠️ Extraviado</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="eq-notes">${data.notes||''}</textarea></div>
+    <div id="form-err"></div>`,
+  [{ label:data.id?'Guardar':'Agregar', cls:'btn-blue', fn:`saveEquipo('${data.id||''}')` },
+   { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+}
+
+function onEqTypeChange() {
+  const t = document.getElementById('eq-type')?.value;
+  const idLabel = document.getElementById('eq-id-label');
+  const idInput = document.getElementById('eq-identifier');
+  const phoneWrap = document.getElementById('eq-phone-wrap');
+  if (idLabel) idLabel.textContent = eqIdLabel(t) + ' *';
+  if (idInput) idInput.placeholder = t==='modem'?'353xxxxxxxxxx':t==='tablet'?'TWEK-XXXXX':t==='mac'?'CXXXXXXXX':'Nombre del equipo';
+  if (phoneWrap) phoneWrap.style.display = t==='modem' ? '' : 'none';
+}
+
+function editEquipo(data) { openModalEquipo(data.trader_id||'', data); }
+
+async function saveEquipo(id) {
+  const equipment_type = data_v('eq-type');
+  const identifier     = data_v('eq-identifier');
+  if (!equipment_type||!identifier) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Tipo e identificador son requeridos</div>'; return; }
+  const payload = {
+    trader_id:     data_v('eq-trader')||null,
+    equipment_type,
+    identifier,
+    phone_number:  data_v('eq-phone')||null,
+    brand:         data_v('eq-brand')||null,
+    model:         data_v('eq-model')||null,
+    assigned_date: data_v('eq-date')||null,
+    status:        data_v('eq-status')||'active',
+    notes:         data_v('eq-notes')||null,
+  };
+  const { error } = id ? await sb.from('trading_equipment').update(payload).eq('id',id) : await sb.from('trading_equipment').insert(payload);
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
+  closeModal(); loadEquipos();
+}
+
+async function deleteEquipo(id) {
+  if (!canDelete()) return;
+  if (!confirm('¿Eliminar este equipo?')) return;
+  await sb.from('trading_equipment').delete().eq('id',id); loadEquipos();
+}
+
+// ══════════════════════════════════════
+// MODAL ENGINE
+// ══════════════════════════════════════
+function setModal(title, body, btns=[]) {
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-body').innerHTML=body;
+  document.getElementById('modal-footer').innerHTML=btns.map(b=>`<button class="btn ${b.cls}" onclick="${b.fn}">${b.label}</button>`).join('');
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal()             { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalIfOutside(e)   { if(e.target===document.getElementById('modal-overlay')) closeModal(); }
+
+// ══════════════════════════════════════
+// FILE UPLOAD — COMPROBANTES
+// ══════════════════════════════════════
+function fileUploadHTML(prefix) {
+  return `
+  <div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:14px">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">📎 Comprobante (opcional)</div>
+    <label id="${prefix}-dropzone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed var(--border);border-radius:10px;padding:20px;cursor:pointer;transition:border-color .15s;min-height:90px;background:var(--surface2)" ondragover="event.preventDefault();this.style.borderColor='var(--blue)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="handleFileDrop(event,'${prefix}')">
+      <span id="${prefix}-drop-icon" style="font-size:24px">📄</span>
+      <span id="${prefix}-drop-label" style="font-size:12px;color:var(--muted)">Arrastra aquí o da clic para seleccionar</span>
+      <span style="font-size:10px;color:var(--faint)">JPG, PNG, PDF · Máx 10 MB</span>
+      <input type="file" id="${prefix}-file" accept="image/*,.pdf" style="display:none" onchange="onFileSelected('${prefix}')">
+    </label>
+    <div id="${prefix}-file-preview" style="display:none;margin-top:8px;display:none;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px">
+      <span id="${prefix}-file-icon" style="font-size:20px">📄</span>
+      <div style="flex:1;min-width:0"><div id="${prefix}-file-name" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div><div id="${prefix}-file-size" style="font-size:10px;color:var(--muted)"></div></div>
+      <button type="button" onclick="clearFile('${prefix}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">✕</button>
+    </div>
+  </div>`;
+}
+
+function onFileSelected(prefix) {
+  const input = document.getElementById(prefix+'-file');
+  if (input?.files?.[0]) showFilePreview(prefix, input.files[0]);
+}
+function handleFileDrop(e, prefix) {
+  e.preventDefault();
+  document.getElementById(prefix+'-dropzone').style.borderColor='var(--border)';
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  const dt = new DataTransfer(); dt.items.add(file);
+  document.getElementById(prefix+'-file').files = dt.files;
+  showFilePreview(prefix, file);
+}
+function showFilePreview(prefix, file) {
+  const isPdf = file.type==='application/pdf';
+  document.getElementById(prefix+'-drop-icon').textContent = isPdf?'📋':'🖼️';
+  document.getElementById(prefix+'-drop-label').textContent = '✅ Archivo seleccionado';
+  const prev = document.getElementById(prefix+'-file-preview');
+  prev.style.display='flex';
+  document.getElementById(prefix+'-file-icon').textContent = isPdf?'📋':'🖼️';
+  document.getElementById(prefix+'-file-name').textContent = file.name;
+  document.getElementById(prefix+'-file-size').textContent = (file.size/1024/1024).toFixed(2)+' MB';
+}
+function clearFile(prefix) {
+  document.getElementById(prefix+'-file').value='';
+  document.getElementById(prefix+'-file-preview').style.display='none';
+  document.getElementById(prefix+'-drop-icon').textContent='📄';
+  document.getElementById(prefix+'-drop-label').textContent='Arrastra aquí o da clic para seleccionar';
+}
+
+async function uploadReceipt(prefix, folder) {
+  const input = document.getElementById(prefix+'-file');
+  const file  = input?.files?.[0];
+  if (!file) return null;
+  if (file.size > 10*1024*1024) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">El archivo supera los 10 MB</div>'; return null; }
+  const ext  = file.name.split('.').pop();
+  const path = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  document.getElementById('form-err').innerHTML='<div style="color:var(--muted);font-size:12px">⬆️ Subiendo comprobante...</div>';
+  const { error } = await sb.storage.from('comprobantes').upload(path, file, { upsert:false });
+  if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">Error al subir: ${error.message}</div>`; return null; }
+  const { data } = sb.storage.from('comprobantes').getPublicUrl(path);
+  document.getElementById('form-err').innerHTML='';
+  return data?.publicUrl||null;
+}
+
+// ══════════════════════════════════════
+// MINI HELPERS
+// ══════════════════════════════════════
+const data_v  = id => document.getElementById(id)?.value?.trim()||'';
+const num     = id => { const v=parseFloat(document.getElementById(id)?.value); return isNaN(v)?null:v; };
+const canDelete = () => userProfile?.role === 'admin';
+const delBtn  = (fn) => canDelete() ? `<button class="btn btn-red btn-sm" onclick="${fn}">🗑</button>` : '';
+
+// ══════════════════════════════════════
+// SEÑALES
+// ══════════════════════════════════════
+let _sgDir = 'LONG', _sgOtype = 'STOP';
+const SG_PPP = {MNQ:2, NQ:20, MYM:0.5, YM:5};
+
+const SG_COLORS = {
+  JAVIER:            {color:'#58a6ff', bg:'rgba(31,58,95,.22)',  border:'#1f3a5f'},
+  GABRIELA:          {color:'#3fb950', bg:'rgba(14,42,26,.22)',  border:'#1a3524'},
+  YAEL:              {color:'#d2a8ff', bg:'rgba(39,26,64,.22)',  border:'#311d5e'},
+  SOL:               {color:'#f0883e', bg:'rgba(45,27,8,.22)',   border:'#4a2a0a'},
+  MARISOL:           {color:'#f0883e', bg:'rgba(45,27,8,.22)',   border:'#4a2a0a'},
+  SALASARCEMARISO:   {color:'#f0883e', bg:'rgba(45,27,8,.22)',   border:'#4a2a0a'},
+  SALASARCEGABRIELA: {color:'#3fb950', bg:'rgba(14,42,26,.22)',  border:'#1a3524'},
+  CAMARILLOSALASYAEL:{color:'#d2a8ff', bg:'rgba(39,26,64,.22)',  border:'#311d5e'},
+};
+const SG_FB = [
+  {color:'#79c0ff',bg:'rgba(20,45,90,.22)',  border:'#1a3566'},
+  {color:'#56d364',bg:'rgba(10,40,20,.22)',  border:'#1a4020'},
+  {color:'#e8b4fb',bg:'rgba(50,20,80,.22)',  border:'#3a1560'},
+  {color:'#ffa657',bg:'rgba(50,30,10,.22)',  border:'#4a2a0a'},
+];
+
+async function loadSenales() {
+  const el = document.getElementById('senales-content');
+  el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
+  const today = new Date().toISOString().split('T')[0];
+  const { data: signal } = await sb.from('trade_signals').select('*').eq('signal_date', today).maybeSingle();
+  if (userProfile?.role === 'trader') {
+    await renderSgTrader(signal, el);
+  } else {
+    await renderSgAdmin(signal, today, el);
+  }
+}
+
+// ─── BIG BANNER ───────────────────────────────────────────
+function sgBanner(signal, entryPrice) {
+  const isLong    = signal.direction === 'LONG';
+  const bg        = isLong ? '#081a0d' : '#1a0808';
+  const border    = isLong ? '#3fb950' : '#f85149';
+  const color     = isLong ? '#3fb950' : '#f85149';
+  const dirText   = isLong ? '📈 COMPRA' : '📉 VENTA';
+  const orderText = signal.order_type === 'MARKET' ? 'MERCADO'
+                  : (isLong ? 'BUY STOP' : 'SELL STOP');
+  const priceStr  = Number(entryPrice).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return `
+    <div style="background:${bg};border:4px solid ${border};border-radius:20px;padding:36px 28px;text-align:center;margin-bottom:20px;">
+      <div style="font-size:72px;font-weight:900;color:${color};line-height:1;margin-bottom:10px;letter-spacing:2px;">${dirText}</div>
+      <div style="font-size:30px;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:4px;margin-bottom:18px;opacity:.9;">${orderText}</div>
+      <div style="font-size:56px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:1px;">${priceStr}</div>
+      <div style="font-size:15px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:3px;">${signal.instrument} &nbsp;·&nbsp; $${signal.ppp}/pt</div>
+      ${signal.notes ? `<div style="background:rgba(255,255,255,.07);border-radius:10px;padding:10px 16px;margin-top:16px;font-size:14px;color:rgba(255,255,255,.7);">${signal.notes}</div>` : ''}
+    </div>`;
+}
+
+// ─── INTEGRATED CALCULATOR ────────────────────────────────
+function sgCalcBlock(inst, myPos, signalId) {
+  const opts = Object.entries(SG_PPP).map(([k,v]) =>
+    `<option value="${k}" ${k===inst?'selected':''}>${k} — $${v}/pt</option>`
+  ).join('');
+  const savedSl   = myPos?.sl_pts   || '';
+  const savedRisk = myPos?.risk_usd || '';
+  const saveBtn = signalId
+    ? `<button class="btn btn-blue" style="width:100%;margin-top:10px;" onclick="saveAdminCalc('${signalId}')">💾 Guardar mi configuración</button>`
+    : '';
+  return `
+    <div class="sg-panel" style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px;">⚡ Mi calculadora</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;">
+        <div>
+          <div class="sg-label">Instrumento</div>
+          <select id="calc-inst" class="sg-input" onchange="sgCalc()">
+            ${opts}
+          </select>
+        </div>
+        <div>
+          <div class="sg-label">Stop Loss (pts)</div>
+          <input type="number" id="calc-sl" class="sg-input" placeholder="ej: 20" step="0.25" inputmode="decimal" value="${savedSl}" oninput="sgCalc()">
+        </div>
+        <div>
+          <div class="sg-label">Riesgo ($)</div>
+          <input type="number" id="calc-risk" class="sg-input" placeholder="ej: 1000" step="1" inputmode="decimal" value="${savedRisk}" oninput="sgCalc()">
+        </div>
+      </div>
+      <div id="calc-result" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">
+        <div style="color:var(--faint);font-size:13px;">Ingresa SL en pts y riesgo para calcular</div>
+      </div>
+      ${saveBtn}
+    </div>`;
+}
+
+function sgCalc() {
+  const inst = document.getElementById('calc-inst')?.value  || 'MNQ';
+  const sl   = parseFloat(document.getElementById('calc-sl')?.value)   || 0;
+  const risk = parseFloat(document.getElementById('calc-risk')?.value) || 0;
+  const el   = document.getElementById('calc-result');
+  if (!el) return;
+  const ppp  = SG_PPP[inst] || 2;
+  if (!sl || !risk) { el.innerHTML = '<div style="color:var(--faint);font-size:13px;">Ingresa SL en pts y riesgo para calcular</div>'; return; }
+  const rpc  = sl * ppp;
+  const cts  = Math.floor(risk / rpc);
+  const actualRisk = cts * rpc;
+  if (cts === 0) { el.innerHTML = '<div style="color:var(--red);font-size:13px;">SL demasiado grande para ese riesgo</div>'; return; }
+  const mnqE = inst === 'NQ' ? cts*10 : (inst === 'MNQ' ? cts : null);
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div style="background:var(--surface);border-radius:8px;padding:12px 8px;text-align:center;">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">Contratos</div>
+        <div style="font-size:38px;font-weight:900;color:var(--blue);line-height:1;">${cts}</div>
+      </div>
+      <div style="background:var(--surface);border-radius:8px;padding:12px 8px;text-align:center;">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">Riesgo real</div>
+        <div style="font-size:22px;font-weight:800;color:var(--red);line-height:1.2;">−$${actualRisk.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--faint);margin-top:2px;">${cts}×${sl}pts×$${ppp}</div>
+      </div>
+      <div style="background:var(--surface);border-radius:8px;padding:12px 8px;text-align:center;">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;">$/punto</div>
+        <div style="font-size:22px;font-weight:800;color:var(--green);line-height:1.2;">$${(cts*ppp).toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--faint);margin-top:2px;">${inst} × ${cts} ctrs</div>
+      </div>
+    </div>
+    ${mnqE !== null ? sgSemaforo(mnqE) : ''}`;
+}
+
+function sgSemaforo(mnq) {
+  const firms = [
+    {name:'TopStep', eval:50, funded:50},
+    {name:'Lucid',   eval:40, funded:20},
+    {name:'Apex',    eval:60, funded:30},
+  ];
+  const cell = (used, limit) => {
+    const ok = used <= limit;
+    return `<span style="background:${ok?'rgba(63,185,80,.12)':'rgba(248,81,73,.12)'};border:1px solid ${ok?'#1e3a1a':'#3a1010'};border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;color:${ok?'var(--green)':'var(--red)'}">${used}/${limit}</span>`;
+  };
+  const rows = firms.map(f => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-top:1px solid var(--border2);">
+      <span style="font-size:12px;color:var(--muted);">${f.name}</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:10px;color:var(--faint);">Eval</span>${cell(mnq,f.eval)}
+        <span style="font-size:10px;color:var(--faint);">Fund</span>${cell(mnq,f.funded)}
+      </div>
+    </div>`).join('');
+  return `
+    <div style="border-top:1px solid var(--border);padding-top:10px;">
+      <div style="font-size:10px;color:var(--faint);margin-bottom:6px;">SEMÁFORO · MNQ equiv: <strong style="color:var(--text)">${mnq}</strong></div>
+      ${rows}
+      <div style="font-size:10px;color:var(--faint);margin-top:4px;">* Lucid funded 20→40 según profit · Apex funded 30→60</div>
+    </div>`;
+}
+
+// ─── ADMIN / MANAGER VIEW ─────────────────────────────────
+async function renderSgAdmin(signal, today, el) {
+  const { data: users } = await sb.from('trading_users').select('*').order('created_at', {ascending:true});
+  const allUsers = users || [];
+  let positions = [];
+  if (signal) {
+    const { data: pos } = await sb.from('trader_positions').select('*').eq('signal_id', signal.id);
+    positions = pos || [];
+  }
+  _sgDir   = signal?.direction  || 'LONG';
+  _sgOtype = signal?.order_type || 'STOP';
+  const adminPos   = signal ? (positions.find(p => p.user_id === currentUser.id) || null) : null;
+  const dateLabel = new Date(today+'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
+
+  el.innerHTML = `
+    <div class="sg-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:15px;font-weight:700;">Señal — ${dateLabel}</div>
+        ${signal ? '<span class="badge badge-funded">Activa</span>' : '<span class="badge" style="background:#1c2128;color:var(--faint);">Sin señal</span>'}
+      </div>
+      <div class="sg-4" style="margin-bottom:14px;">
+        <div>
+          <div class="sg-label">Dirección</div>
+          <div class="tgl-grp" id="sg-dir">
+            <button class="tgl ${_sgDir==='LONG'?'on-green':''}" onclick="sgDir('LONG',this)">📈 LONG</button>
+            <button class="tgl ${_sgDir==='SHORT'?'on-red':''}" onclick="sgDir('SHORT',this)">📉 SHORT</button>
+          </div>
+        </div>
+        <div>
+          <div class="sg-label">Tipo de orden</div>
+          <div class="tgl-grp" id="sg-otype">
+            <button class="tgl ${_sgOtype==='STOP'?'on-blue':''}" onclick="sgOtype('STOP',this)">STOP</button>
+            <button class="tgl ${_sgOtype==='MARKET'?'on-blue':''}" onclick="sgOtype('MARKET',this)">MERCADO</button>
+          </div>
+        </div>
+        <div>
+          <div class="sg-label">Instrumento</div>
+          <select id="sg-inst" class="sg-input">
+            <option value="MNQ" ${signal?.instrument==='MNQ'||!signal?'selected':''}>MNQ – $2/pt</option>
+            <option value="NQ"  ${signal?.instrument==='NQ'?'selected':''}>NQ – $20/pt</option>
+            <option value="MYM" ${signal?.instrument==='MYM'?'selected':''}>MYM – $0.5/pt</option>
+            <option value="YM"  ${signal?.instrument==='YM'?'selected':''}>YM – $5/pt</option>
+          </select>
+        </div>
+        <div>
+          <div class="sg-label">Precio base</div>
+          <input type="number" id="sg-price" class="sg-input" step="0.25" placeholder="ej: 21500" value="${signal?.base_price||''}">
+        </div>
+      </div>
+      <div id="sg-spread-wrap" style="margin-bottom:14px;${_sgOtype==='MARKET'?'display:none':''}">
+        <div class="sg-label">Spread entre traders (pts)</div>
+        <input type="number" id="sg-spread" class="sg-input" style="max-width:120px;" step="0.25" value="${signal?.spread||5}">
+      </div>
+      <div style="margin-bottom:16px;">
+        <div class="sg-label">Notas del setup</div>
+        <input type="text" id="sg-notes" class="sg-input" placeholder="Contexto del trade..." value="${signal?.notes||''}">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-blue" onclick="publishSignal()">${signal?'♻️ Actualizar señal':'🚀 Publicar señal'}</button>
+        ${signal && canDelete() ? `<button class="btn btn-red" onclick="deleteSignal('${signal.id}')">🗑 Eliminar señal</button>` : ''}
+      </div>
+    </div>
+
+    ${signal ? sgBanner(signal, signal.base_price) : ''}
+
+    ${sgCalcBlock(signal?.instrument || 'MNQ', adminPos, signal?.id || null)}
+
+    <div id="sg-cards">
+      ${signal
+        ? sgCardGrid(allUsers, positions, signal)
+        : '<div class="empty-state"><div class="e-icon">🎯</div><p>Publica una señal para ver las entradas del equipo</p></div>'}
+    </div>
+
+    ${canDelete() ? sgUserManager(allUsers) : ''}`;
+  // Auto-calc if admin has pre-saved values
+  if (adminPos?.sl_pts || adminPos?.risk_usd) setTimeout(() => sgCalc(), 0);
+}
+
+// ─── TRADER CARDS (admin view) ────────────────────────────
+function sgCardGrid(users, positions, signal) {
+  if (!users.length) return '<div class="empty-state"><div class="e-icon">👥</div><p>No hay usuarios registrados.</p></div>';
+  const sign       = signal.direction === 'LONG' ? 1 : -1;
+  const dirLabel   = signal.direction  === 'LONG' ? '📈 COMPRA' : '📉 VENTA';
+  const orderLabel = signal.order_type === 'MARKET' ? 'MERCADO'
+                   : (signal.direction === 'LONG'   ? 'BUY STOP' : 'SELL STOP');
+  const ppp = SG_PPP[signal.instrument] || 2;
+  const cards = users.map((u, i) => {
+    const pos        = positions.find(p => p.user_id === u.id);
+    const variation  = pos?.entry_variation ?? 0;
+    const spread     = signal.spread || 5;
+    const calcPrice  = signal.order_type === 'MARKET'
+      ? signal.base_price
+      : signal.base_price + sign * i * spread + variation;
+    const entryPrice = pos?.entry_price ?? calcPrice;
+    const risk   = pos?.risk_usd;
+    const sl_pts = pos?.sl_pts;
+    const cts    = (risk && sl_pts && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
+    const name   = (u.name || 'Trader').toUpperCase();
+    const c      = SG_COLORS[name] || SG_FB[i % SG_FB.length];
+    return `
+      <div class="sg-card" style="background:${c.bg};border:1px solid ${c.border};">
+        <div class="sg-card-hd" style="color:${c.color};">${u.name||'Trader'}</div>
+        <div class="sg-price" style="color:${c.color};">${Number(entryPrice).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        <div class="sg-order">${dirLabel} · ${orderLabel}</div>
+        ${signal.order_type!=='MARKET'?`<div class="sg-row"><span class="sg-rl">Variación</span><span class="sg-rv" style="color:var(--muted)">${variation>=0?'+':''}${variation} pts</span></div>`:''}
+        <div class="sg-row"><span class="sg-rl">Riesgo</span><span class="sg-rv">${risk?'$'+Number(risk).toLocaleString():'—'}</span></div>
+        <div class="sg-row"><span class="sg-rl">SL</span><span class="sg-rv">${sl_pts?sl_pts+' pts':'—'}</span></div>
+        <div class="sg-contracts" style="color:${c.color};"><span style="font-size:10px;font-weight:400;color:var(--muted);display:block;letter-spacing:.8px;margin-bottom:2px;">CONTRATOS</span>${cts??'—'}</div>
+      </div>`;
+  }).join('');
+  return `<div class="sg-grid">${cards}</div>`;
+}
+
+// ─── TRADER VIEW ──────────────────────────────────────────
+async function renderSgTrader(signal, el) {
+  if (!signal) {
+    el.innerHTML = `
+      <div class="empty-state" style="margin-top:80px;">
+        <div class="e-icon">⏳</div>
+        <div style="font-size:16px;font-weight:600;color:var(--muted);margin-bottom:8px;">Esperando señal del día</div>
+        <div style="color:var(--faint);font-size:13px;margin-bottom:20px;">El administrador aún no publicó la señal de hoy.</div>
+        <button class="btn-outline" onclick="loadSenales()">🔄 Actualizar</button>
+      </div>`;
+    return;
+  }
+  const { data: pos } = await sb.from('trader_positions')
+    .select('*').eq('signal_id', signal.id).eq('user_id', currentUser.id).maybeSingle();
+  const ppp        = SG_PPP[signal.instrument] || 2;
+  const variation  = pos?.entry_variation ?? 0;
+  const entryPrice = pos?.entry_price ?? (signal.order_type === 'MARKET' ? signal.base_price : signal.base_price + variation);
+  const risk       = pos?.risk_usd || '';
+  const sl_pts     = pos?.sl_pts   || '';
+  const cts        = (risk && sl_pts && Number(sl_pts) > 0) ? Math.floor(Number(risk)/(Number(sl_pts)*ppp)) : null;
+
+  el.innerHTML = `
+    <div style="max-width:580px;margin:0 auto;padding-top:16px;">
+      ${sgBanner(signal, entryPrice)}
+      ${signal.order_type!=='MARKET'?`<div style="text-align:center;font-size:12px;color:var(--faint);margin-top:-12px;margin-bottom:16px;">Base: ${signal.base_price} · Tu variación: ${variation>=0?'+':''}${variation} pts</div>`:''}
+
+      <div class="sg-panel">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px;">⚡ Mi calculadora</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <div class="sg-label">Stop Loss (pts)</div>
+            <input type="number" id="my-sl" class="sg-input" placeholder="ej: 20" step="0.25" value="${sl_pts}" oninput="calcMyCts(${ppp})" inputmode="decimal">
+          </div>
+          <div>
+            <div class="sg-label">Riesgo ($)</div>
+            <input type="number" id="my-risk" class="sg-input" placeholder="ej: 1000" step="1" value="${risk}" oninput="calcMyCts(${ppp})" inputmode="decimal">
+          </div>
+        </div>
+        <div id="my-cts" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;margin-bottom:14px;">
+          ${cts
+            ? `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Contratos</div>
+               <div style="font-size:52px;font-weight:900;color:var(--blue);line-height:1;">${cts}</div>
+               <div style="font-size:11px;color:var(--faint);margin-top:4px;">$${Number(risk).toLocaleString()} ÷ (${sl_pts}pts×$${ppp}) = ${cts} ctrs</div>`
+            : '<div style="color:var(--faint);font-size:13px;">Ingresa SL en pts y tu riesgo</div>'}
+        </div>
+        <button class="btn btn-blue" style="width:100%;" onclick="saveMyCts('${signal.id}',${ppp})">💾 Guardar mi configuración</button>
+      </div>
+      <div style="text-align:center;margin-top:14px;">
+        <button class="btn-outline" onclick="loadSenales()">🔄 Actualizar señal</button>
+      </div>
+    </div>`;
+}
+
+function calcMyCts(ppp) {
+  const sl   = parseFloat(document.getElementById('my-sl')?.value)   || 0;
+  const risk = parseFloat(document.getElementById('my-risk')?.value) || 0;
+  const el   = document.getElementById('my-cts');
+  if (!el) return;
+  if (sl > 0 && risk > 0) {
+    const rpc = sl * ppp, c = Math.floor(risk / rpc);
+    el.innerHTML = c > 0
+      ? `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Contratos</div>
+         <div style="font-size:52px;font-weight:900;color:var(--blue);line-height:1;">${c}</div>
+         <div style="font-size:11px;color:var(--faint);margin-top:4px;">$${risk.toLocaleString()} ÷ (${sl}pts×$${ppp}) = ${c} ctrs</div>`
+      : '<div style="color:var(--red);font-size:13px;">SL demasiado grande para ese riesgo</div>';
+  } else {
+    el.innerHTML = '<div style="color:var(--faint);font-size:13px;">Ingresa SL en pts y tu riesgo</div>';
+  }
+}
+
+async function saveMyCts(signalId, ppp) {
+  const risk   = parseFloat(document.getElementById('my-risk')?.value) || null;
+  const sl_pts = parseFloat(document.getElementById('my-sl')?.value)   || null;
+  const cts    = (risk && sl_pts && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
+  const { error } = await sb.from('trader_positions')
+    .upsert({ signal_id: signalId, user_id: currentUser.id,
+              risk_usd: risk, sl_pts, contracts: cts, updated_at: new Date().toISOString() },
+            { onConflict: 'signal_id,user_id', ignoreDuplicates: false });
+  if (error) { alert('Error: ' + error.message); return; }
+  const btn = document.querySelector('#senales-content .btn-blue[onclick*="saveMyCts"]');
+  if (btn) { const orig = btn.textContent; btn.textContent = '✅ Guardado'; setTimeout(() => btn.textContent = orig, 2000); }
+}
+
+async function saveAdminCalc(signalId) {
+  const inst   = document.getElementById('calc-inst')?.value || 'MNQ';
+  const ppp    = SG_PPP[inst] || 2;
+  const risk   = parseFloat(document.getElementById('calc-risk')?.value) || null;
+  const sl_pts = parseFloat(document.getElementById('calc-sl')?.value)   || null;
+  const cts    = (risk && sl_pts && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
+  const { error } = await sb.from('trader_positions')
+    .upsert({ signal_id: signalId, user_id: currentUser.id,
+              risk_usd: risk, sl_pts, contracts: cts, updated_at: new Date().toISOString() },
+            { onConflict: 'signal_id,user_id', ignoreDuplicates: false });
+  if (error) { alert('Error: ' + error.message); return; }
+  const btn = document.querySelector('#senales-content .btn-blue[onclick*="saveAdminCalc"]');
+  if (btn) { const orig = btn.textContent; btn.textContent = '✅ Guardado'; setTimeout(() => btn.textContent = orig, 2000); }
+}
+
+function sgDir(dir, btn) {
+  _sgDir = dir;
+  document.querySelectorAll('#sg-dir .tgl').forEach(b => b.className = 'tgl');
+  btn.className = 'tgl ' + (dir === 'LONG' ? 'on-green' : 'on-red');
+}
+function sgOtype(otype, btn) {
+  _sgOtype = otype;
+  document.querySelectorAll('#sg-otype .tgl').forEach(b => b.className = 'tgl');
+  btn.className = 'tgl on-blue';
+  const sw = document.getElementById('sg-spread-wrap');
+  if (sw) sw.style.display = otype === 'MARKET' ? 'none' : '';
+}
+
+async function publishSignal() {
+  const price  = parseFloat(document.getElementById('sg-price')?.value);
+  const notes  = document.getElementById('sg-notes')?.value?.trim() || '';
+  const spread = parseFloat(document.getElementById('sg-spread')?.value) || 5;
+  const inst   = document.getElementById('sg-inst')?.value || 'MNQ';
+  const ppp    = SG_PPP[inst] || 2;
+  const today  = new Date().toISOString().split('T')[0];
+  if (!price || isNaN(price)) { alert('Ingresa el precio base'); return; }
+
+  const payload = {
+    direction: _sgDir, order_type: _sgOtype, instrument: inst, ppp,
+    base_price: price, spread, notes: notes || null, is_active: true
+  };
+
+  // Fetch existing first to PRESERVE the same id — upsert can regenerate it
+  // and ON DELETE CASCADE would wipe all trader positions
+  const { data: existing0 } = await sb.from('trade_signals')
+    .select('id').eq('signal_date', today).maybeSingle();
+
+  let signal;
+  if (existing0) {
+    const { data, error } = await sb.from('trade_signals')
+      .update(payload).eq('id', existing0.id).select().single();
+    if (error) { alert('Error al actualizar señal: ' + error.message); return; }
+    signal = data;
+  } else {
+    const { data, error } = await sb.from('trade_signals')
+      .insert({ ...payload, signal_date: today, created_by: currentUser.id }).select().single();
+    if (error) { alert('Error al crear señal: ' + error.message); return; }
+    signal = data;
+  }
+
+  const { data: allUsers } = await sb.from('trading_users')
+    .select('id').order('created_at', {ascending:true});
+  if (allUsers?.length) {
+    const sign = _sgDir === 'LONG' ? 1 : -1;
+    for (let i = 0; i < allUsers.length; i++) {
+      const uid = allUsers[i].id;
+      const { data: pos } = await sb.from('trader_positions')
+        .select('id, entry_variation').eq('signal_id', signal.id).eq('user_id', uid).maybeSingle();
+      const variation  = pos ? pos.entry_variation : sgVariation(i);
+      const entryPrice = _sgOtype === 'MARKET' ? price : price + sign * i * spread + variation;
+      if (pos) {
+        // Solo actualiza el precio de entrada — riesgo y SL del trader se preservan
+        await sb.from('trader_positions')
+          .update({ entry_price: entryPrice, updated_at: new Date().toISOString() }).eq('id', pos.id);
+      } else {
+        await sb.from('trader_positions')
+          .insert({ signal_id: signal.id, user_id: uid, entry_variation: variation, entry_price: entryPrice });
+      }
+    }
+  }
+  await loadSenales();
+}
+
+function sgVariation(idx) {
+  if (idx === 0) return 0;
+  const pool = [-10,-9,-8,-7,-6,-5,-4,-3,3,4,5,6,7,8,9,10];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+async function deleteSignal(id) {
+  if (!canDelete()) return;
+  if (!confirm('¿Eliminar la señal de hoy? Se borrarán las posiciones del equipo.')) return;
+  await sb.from('trade_signals').delete().eq('id', id);
+  await loadSenales();
+}
+
+function sgUserManager(users) {
+  if (!users.length) return '';
+  const rows = users.map(u => `
+    <tr>
+      <td style="font-weight:600;">${u.name||'—'}</td>
+      <td style="color:var(--muted);font-size:11px;font-family:monospace;">${u.id.slice(0,8)}…</td>
+      <td><span class="badge ${u.role==='admin'?'badge-funded':u.role==='manager'?'badge-eval':'badge-futures'}">${u.role}</span></td>
+      <td>
+        <select style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:12px;" onchange="changeUserRole('${u.id}',this.value)">
+          <option value="admin"   ${u.role==='admin'?'selected':''}>Admin</option>
+          <option value="manager" ${u.role==='manager'?'selected':''}>Manager</option>
+          <option value="trader"  ${u.role==='trader'?'selected':''}>Trader</option>
+        </select>
+      </td>
+    </tr>`).join('');
+  return `
+    <div style="margin-top:28px;">
+      <div class="section-divider">Gestión de accesos (Admin)</div>
+      <div class="table-card">
+        <table>
+          <thead><tr><th>Nombre</th><th>ID</th><th>Rol actual</th><th>Cambiar rol</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="sg-panel" style="margin-top:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px;">➕ Agregar usuario</div>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;">
+          <div>
+            <div class="sg-label">UUID (cópialo de Supabase → Auth → Users)</div>
+            <input type="text" id="new-user-uuid" class="sg-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+          </div>
+          <div>
+            <div class="sg-label">Nombre en el dashboard</div>
+            <input type="text" id="new-user-name" class="sg-input" placeholder="ej: Carlos">
+          </div>
+          <div>
+            <div class="sg-label">Rol</div>
+            <select id="new-user-role" class="sg-input">
+              <option value="trader">Trader</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button class="btn btn-blue" onclick="addTradingUser()">Agregar</button>
+        </div>
+        <div id="add-user-msg" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+    </div>`;
+}
+
+async function addTradingUser() {
+  const uid  = document.getElementById('new-user-uuid')?.value?.trim();
+  const name = document.getElementById('new-user-name')?.value?.trim();
+  const role = document.getElementById('new-user-role')?.value;
+  const msg  = document.getElementById('add-user-msg');
+  if (!uid || !name) { msg.style.color='var(--red)'; msg.textContent='Completa el UUID y el nombre.'; return; }
+  const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRx.test(uid)) { msg.style.color='var(--red)'; msg.textContent='El UUID no tiene formato válido.'; return; }
+  const { error } = await sb.from('trading_users')
+    .upsert({ id: uid, name, role }, { onConflict: 'id' });
+  if (error) { msg.style.color='var(--red)'; msg.textContent='Error: '+error.message; return; }
+  msg.style.color='var(--green)';
+  msg.textContent='✅ Usuario agregado.';
+  document.getElementById('new-user-uuid').value='';
+  document.getElementById('new-user-name').value='';
+  setTimeout(() => loadSenales(), 1500);
+}
+
+async function changeUserRole(uid, role) {
+  const { error } = await sb.from('trading_users').update({ role }).eq('id', uid);
+  if (error) alert('Error al cambiar rol: ' + error.message);
+}
+
+// START
+init();
+</script>
+</body>
+</html>
