@@ -512,10 +512,11 @@ document.getElementById('login-pass').addEventListener('keydown', e => { if(e.ke
 // ══════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════
-let _sgPoll = null;
+let _sgChannel = null;
+let _sgLastHash = null;
 function goTo(page) {
-  // Detener auto-refresh al salir de Señales
-  if (_sgPoll) { clearInterval(_sgPoll); _sgPoll = null; }
+  // Desuscribir realtime al salir de Señales
+  if (_sgChannel) { sb.removeChannel(_sgChannel); _sgChannel = null; }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -529,10 +530,13 @@ function goTo(page) {
   if (page==='rendimiento') loadRendimiento();
   if (page==='senales')     {
     loadSenales();
-    // Auto-refresh cada 20 segundos para traders y manager
-    if (userProfile?.role !== 'admin') {
-      _sgPoll = setInterval(() => loadSenales(), 20000);
-    }
+    // Realtime: recarga instantánea cuando admin actualiza la señal
+    _sgChannel = sb.channel('sg-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trade_signals' },
+        () => { if (userProfile?.role !== 'admin') loadSenales(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trader_positions' },
+        () => { if (userProfile?.role === 'admin') loadSenales(); })
+      .subscribe();
   }
 }
 
