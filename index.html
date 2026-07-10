@@ -2137,9 +2137,9 @@ async function publishSignal() {
       const variation  = pos ? pos.entry_variation : sgVariation(i);
       const entryPrice = _sgOtype === 'MARKET' ? price : price + sign * i * spread + variation;
       if (pos) {
-        // Solo actualiza el precio de entrada — riesgo y SL del trader se preservan
+        // Recalcular variación y precio — siempre resetear al republicar
         await sb.from('trader_positions')
-          .update({ entry_price: entryPrice, updated_at: new Date().toISOString() }).eq('id', pos.id);
+          .update({ entry_variation: variation, entry_price: entryPrice, updated_at: new Date().toISOString() }).eq('id', pos.id);
       } else {
         await sb.from('trader_positions')
           .insert({ signal_id: signal.id, user_id: uid, entry_variation: variation, entry_price: entryPrice });
@@ -2150,10 +2150,9 @@ async function publishSignal() {
 }
 
 function sgVariation(idx) {
-  if (idx === 0) return 0;
-  // ±0.5 a 2 pts — diferencia mínima para evitar detección, nunca cancela el spread
-  const pool = [-2, -1.75, -1.5, -1.25, -1, -0.75, -0.5, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-  return pool[Math.floor(Math.random() * pool.length)];
+  // Deterministic small offsets — never cancels the spread between traders
+  const offsets = [0, 0.5, -0.5, 0.25, -0.25, 0.75, -0.75, 1];
+  return offsets[idx % offsets.length];
 }
 
 async function deleteSignal(id) {
