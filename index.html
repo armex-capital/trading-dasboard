@@ -1883,9 +1883,15 @@ async function renderSgAdmin(signal, today, el) {
           <input type="number" id="sg-price" class="sg-input" step="0.25" placeholder="ej: 21500" value="${signal?.base_price||''}">
         </div>
       </div>
-      <div id="sg-spread-wrap" style="margin-bottom:14px;${_sgOtype==='MARKET'?'display:none':''}">
-        <div class="sg-label">Spread entre traders (pts)</div>
-        <input type="number" id="sg-spread" class="sg-input" style="max-width:120px;" step="0.25" value="${signal?.spread||5}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div id="sg-spread-wrap" style="${_sgOtype==='MARKET'?'display:none':''}">
+          <div class="sg-label">Spread entre traders (pts)</div>
+          <input type="number" id="sg-spread" class="sg-input" step="0.25" value="${signal?.spread||5}">
+        </div>
+        <div>
+          <div class="sg-label">Stop Loss (pts)</div>
+          <input type="number" id="sg-sl" class="sg-input" step="0.25" placeholder="ej: 20" value="${signal?.sl_pts||''}">
+        </div>
       </div>
       <div style="margin-bottom:16px;">
         <div class="sg-label">Notas del setup</div>
@@ -1929,8 +1935,8 @@ function sgCardGrid(users, positions, signal) {
       : signal.base_price + sign * i * spread + variation;
     const entryPrice = pos?.entry_price ?? calcPrice;
     const risk   = pos?.risk_usd;
-    const sl_pts = pos?.sl_pts;
-    const cts    = (risk && sl_pts && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
+    const sl_pts = signal.sl_pts || 0;
+    const cts    = (risk && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
     const name   = (u.name || 'Trader').toUpperCase();
     const c      = SG_COLORS[name] || SG_FB[i % SG_FB.length];
     return `
@@ -1940,7 +1946,8 @@ function sgCardGrid(users, positions, signal) {
         <div class="sg-order">${dirLabel} · ${orderLabel}</div>
         ${signal.order_type!=='MARKET'?`<div class="sg-row"><span class="sg-rl">Variación</span><span class="sg-rv" style="color:var(--muted)">${variation>=0?'+':''}${variation} pts</span></div>`:''}
         <div class="sg-row"><span class="sg-rl">Riesgo</span><span class="sg-rv">${risk?'$'+Number(risk).toLocaleString():'—'}</span></div>
-        <div class="sg-row"><span class="sg-rl">SL</span><span class="sg-rv">${sl_pts?sl_pts+' pts':'—'}</span></div>
+        <div class="sg-row"><span class="sg-rl">TP</span><span class="sg-rv">${pos?.tp_usd?'$'+Number(pos.tp_usd).toLocaleString():'—'}</span></div>
+        <div class="sg-row"><span class="sg-rl">SL</span><span class="sg-rv">${signal.sl_pts?signal.sl_pts+' pts':'—'}</span></div>
         <div class="sg-contracts" style="color:${c.color};"><span style="font-size:10px;font-weight:400;color:var(--muted);display:block;letter-spacing:.8px;margin-bottom:2px;">CONTRATOS</span>${cts??'—'}</div>
       </div>`;
   }).join('');
@@ -1962,11 +1969,12 @@ async function renderSgTrader(signal, el) {
   const { data: pos } = await sb.from('trader_positions')
     .select('*').eq('signal_id', signal.id).eq('user_id', currentUser.id).maybeSingle();
   const ppp        = SG_PPP[signal.instrument] || 2;
+  const sl_pts     = signal.sl_pts || 0;
   const variation  = pos?.entry_variation ?? 0;
   const entryPrice = pos?.entry_price ?? (signal.order_type === 'MARKET' ? signal.base_price : signal.base_price + variation);
   const risk       = pos?.risk_usd || '';
-  const sl_pts     = pos?.sl_pts   || '';
-  const cts        = (risk && sl_pts && Number(sl_pts) > 0) ? Math.floor(Number(risk)/(Number(sl_pts)*ppp)) : null;
+  const tp         = pos?.tp_usd   || '';
+  const cts        = (risk && sl_pts > 0) ? Math.floor(Number(risk) / (sl_pts * ppp)) : null;
 
   el.innerHTML = `
     <div style="max-width:580px;margin:0 auto;padding-top:16px;">
@@ -1974,15 +1982,25 @@ async function renderSgTrader(signal, el) {
       ${signal.order_type!=='MARKET'?`<div style="text-align:center;font-size:12px;color:var(--faint);margin-top:-12px;margin-bottom:16px;">Base: ${signal.base_price} · Tu variación: ${variation>=0?'+':''}${variation} pts</div>`:''}
 
       <div class="sg-panel">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px;">⚡ Mi calculadora</div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px;">⚡ Mi operación</div>
+
+        ${sl_pts ? `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Stop Loss del setup</span>
+          <span style="font-size:22px;font-weight:800;color:var(--red);">${sl_pts} pts</span>
+        </div>` : `
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;text-align:center;color:var(--faint);font-size:13px;">
+          El administrador aún no definió el Stop Loss
+        </div>`}
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
           <div>
-            <div class="sg-label">Stop Loss (pts)</div>
-            <input type="number" id="my-sl" class="sg-input" placeholder="ej: 20" step="0.25" value="${sl_pts}" oninput="calcMyCts(${ppp})" inputmode="decimal">
+            <div class="sg-label">Mi riesgo ($)</div>
+            <input type="number" id="my-risk" class="sg-input" placeholder="ej: 1500" step="1" value="${risk}" oninput="calcMyCts(${ppp},${sl_pts})" inputmode="decimal">
           </div>
           <div>
-            <div class="sg-label">Riesgo ($)</div>
-            <input type="number" id="my-risk" class="sg-input" placeholder="ej: 1000" step="1" value="${risk}" oninput="calcMyCts(${ppp})" inputmode="decimal">
+            <div class="sg-label">Mi TP ($)</div>
+            <input type="number" id="my-tp" class="sg-input" placeholder="ej: 3000" step="1" value="${tp}" inputmode="decimal">
           </div>
         </div>
         <div id="my-cts" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;margin-bottom:14px;">
@@ -1990,9 +2008,9 @@ async function renderSgTrader(signal, el) {
             ? `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Contratos</div>
                <div style="font-size:52px;font-weight:900;color:var(--blue);line-height:1;">${cts}</div>
                <div style="font-size:11px;color:var(--faint);margin-top:4px;">$${Number(risk).toLocaleString()} ÷ (${sl_pts}pts×$${ppp}) = ${cts} ctrs</div>`
-            : '<div style="color:var(--faint);font-size:13px;">Ingresa SL en pts y tu riesgo</div>'}
+            : `<div style="color:var(--faint);font-size:13px;">${sl_pts ? 'Ingresa tu riesgo para calcular contratos' : 'Esperando SL del administrador'}</div>`}
         </div>
-        <button class="btn btn-blue" style="width:100%;" onclick="saveMyCts('${signal.id}',${ppp})">💾 Guardar mi configuración</button>
+        <button class="btn btn-blue" style="width:100%;" onclick="saveMyCts('${signal.id}',${ppp},${sl_pts})">💾 Guardar mi configuración</button>
       </div>
       <div style="text-align:center;margin-top:14px;">
         <button class="btn-outline" onclick="loadSenales()">🔄 Actualizar señal</button>
@@ -2000,30 +2018,29 @@ async function renderSgTrader(signal, el) {
     </div>`;
 }
 
-function calcMyCts(ppp) {
-  const sl   = parseFloat(document.getElementById('my-sl')?.value)   || 0;
+function calcMyCts(ppp, sl_pts) {
   const risk = parseFloat(document.getElementById('my-risk')?.value) || 0;
   const el   = document.getElementById('my-cts');
   if (!el) return;
-  if (sl > 0 && risk > 0) {
-    const rpc = sl * ppp, c = Math.floor(risk / rpc);
+  if (sl_pts > 0 && risk > 0) {
+    const rpc = sl_pts * ppp, c = Math.floor(risk / rpc);
     el.innerHTML = c > 0
       ? `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Contratos</div>
          <div style="font-size:52px;font-weight:900;color:var(--blue);line-height:1;">${c}</div>
-         <div style="font-size:11px;color:var(--faint);margin-top:4px;">$${risk.toLocaleString()} ÷ (${sl}pts×$${ppp}) = ${c} ctrs</div>`
+         <div style="font-size:11px;color:var(--faint);margin-top:4px;">$${risk.toLocaleString()} ÷ (${sl_pts}pts×$${ppp}) = ${c} ctrs</div>`
       : '<div style="color:var(--red);font-size:13px;">SL demasiado grande para ese riesgo</div>';
   } else {
-    el.innerHTML = '<div style="color:var(--faint);font-size:13px;">Ingresa SL en pts y tu riesgo</div>';
+    el.innerHTML = `<div style="color:var(--faint);font-size:13px;">${sl_pts ? 'Ingresa tu riesgo para calcular contratos' : 'Esperando SL del administrador'}</div>`;
   }
 }
 
-async function saveMyCts(signalId, ppp) {
+async function saveMyCts(signalId, ppp, sl_pts) {
   const risk   = parseFloat(document.getElementById('my-risk')?.value) || null;
-  const sl_pts = parseFloat(document.getElementById('my-sl')?.value)   || null;
-  const cts    = (risk && sl_pts && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
+  const tp_usd = parseFloat(document.getElementById('my-tp')?.value)   || null;
+  const cts    = (risk && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
   const { error } = await sb.from('trader_positions')
     .upsert({ signal_id: signalId, user_id: currentUser.id,
-              risk_usd: risk, sl_pts, contracts: cts, updated_at: new Date().toISOString() },
+              risk_usd: risk, sl_pts, tp_usd, contracts: cts, updated_at: new Date().toISOString() },
             { onConflict: 'signal_id,user_id', ignoreDuplicates: false });
   if (error) { alert('Error: ' + error.message); return; }
   const btn = document.querySelector('#senales-content .btn-blue[onclick*="saveMyCts"]');
@@ -2062,6 +2079,7 @@ async function publishSignal() {
   const price  = parseFloat(document.getElementById('sg-price')?.value);
   const notes  = document.getElementById('sg-notes')?.value?.trim() || '';
   const spread = parseFloat(document.getElementById('sg-spread')?.value) || 5;
+  const sl_pts = parseFloat(document.getElementById('sg-sl')?.value) || null;
   const inst   = document.getElementById('sg-inst')?.value || 'MNQ';
   const ppp    = SG_PPP[inst] || 2;
   const today  = new Date().toISOString().split('T')[0];
@@ -2069,7 +2087,7 @@ async function publishSignal() {
 
   const payload = {
     direction: _sgDir, order_type: _sgOtype, instrument: inst, ppp,
-    base_price: price, spread, notes: notes || null, is_active: true
+    base_price: price, spread, sl_pts, notes: notes || null, is_active: true
   };
 
   // Fetch existing first to PRESERVE the same id — upsert can regenerate it
