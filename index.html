@@ -513,10 +513,12 @@ document.getElementById('login-pass').addEventListener('keydown', e => { if(e.ke
 // NAVIGATION
 // ══════════════════════════════════════
 let _sgChannel = null;
+let _sgPoll    = null;
 let _sgLastHash = null;
 function goTo(page) {
   // Desuscribir realtime al salir de Señales
   if (_sgChannel) { sb.removeChannel(_sgChannel); _sgChannel = null; }
+  if (_sgPoll)    { clearInterval(_sgPoll); _sgPoll = null; }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -530,13 +532,17 @@ function goTo(page) {
   if (page==='rendimiento') loadRendimiento();
   if (page==='senales')     {
     loadSenales();
-    // Realtime: recarga instantánea cuando admin actualiza la señal
+    // Realtime via postgres_changes
     _sgChannel = sb.channel('sg-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trade_signals' },
         () => { loadSenales(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trader_positions' },
         () => { loadSenales(); })
       .subscribe();
+    // Poll fallback every 5s for traders (in case Realtime doesn't fire due to RLS)
+    if (userProfile?.role !== 'admin') {
+      _sgPoll = setInterval(() => loadSenales(), 5000);
+    }
   }
 }
 
