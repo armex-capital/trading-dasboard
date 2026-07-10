@@ -512,7 +512,10 @@ document.getElementById('login-pass').addEventListener('keydown', e => { if(e.ke
 // ══════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════
+let _sgPoll = null;
 function goTo(page) {
+  // Detener auto-refresh al salir de Señales
+  if (_sgPoll) { clearInterval(_sgPoll); _sgPoll = null; }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -524,7 +527,13 @@ function goTo(page) {
   if (page==='traders')     loadTraders();
   if (page==='equipos')     { loadEquipoTraderFilter(); loadEquipos(); }
   if (page==='rendimiento') loadRendimiento();
-  if (page==='senales')     loadSenales();
+  if (page==='senales')     {
+    loadSenales();
+    // Auto-refresh cada 20 segundos para traders y manager
+    if (userProfile?.role !== 'admin') {
+      _sgPoll = setInterval(() => loadSenales(), 20000);
+    }
+  }
 }
 
 // ══════════════════════════════════════
