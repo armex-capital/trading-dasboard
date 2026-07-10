@@ -1712,10 +1712,10 @@ async function loadSenales() {
   el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
   const today = new Date().toISOString().split('T')[0];
   const { data: signal } = await sb.from('trade_signals').select('*').eq('signal_date', today).maybeSingle();
-  if (userProfile?.role === 'trader') {
-    await renderSgTrader(signal, el);
-  } else {
+  if (userProfile?.role === 'admin') {
     await renderSgAdmin(signal, today, el);
+  } else {
+    await renderSgTrader(signal, el);
   }
 }
 
