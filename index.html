@@ -533,9 +533,9 @@ function goTo(page) {
     // Realtime: recarga instantánea cuando admin actualiza la señal
     _sgChannel = sb.channel('sg-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trade_signals' },
-        () => { if (userProfile?.role !== 'admin') loadSenales(); })
+        () => { loadSenales(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trader_positions' },
-        () => { if (userProfile?.role === 'admin') loadSenales(); })
+        () => { loadSenales(); })
       .subscribe();
   }
 }
