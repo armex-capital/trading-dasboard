@@ -1757,7 +1757,6 @@ function sgCalcBlock(inst, myPos, signalId) {
   const opts = Object.entries(SG_PPP).map(([k,v]) =>
     `<option value="${k}" ${k===inst?'selected':''}>${k} — $${v}/pt</option>`
   ).join('');
-  const savedSl   = myPos?.sl_pts   || '';
   const savedRisk = myPos?.risk_usd || '';
   const saveBtn = signalId
     ? `<button class="btn btn-blue" style="width:100%;margin-top:10px;" onclick="saveAdminCalc('${signalId}')">💾 Guardar mi configuración</button>`
@@ -1774,7 +1773,10 @@ function sgCalcBlock(inst, myPos, signalId) {
         </div>
         <div>
           <div class="sg-label">Stop Loss (pts)</div>
-          <input type="number" id="calc-sl" class="sg-input" placeholder="ej: 20" step="0.25" inputmode="decimal" value="${savedSl}" oninput="sgCalc()">
+          <div class="sg-input" style="background:var(--bg2);color:var(--muted);cursor:default;display:flex;align-items:center;gap:6px;">
+            <span id="calc-sl-display">—</span>
+            <span style="font-size:11px;color:var(--faint);">pts (de la señal)</span>
+          </div>
         </div>
         <div>
           <div class="sg-label">Riesgo ($)</div>
@@ -1782,7 +1784,7 @@ function sgCalcBlock(inst, myPos, signalId) {
         </div>
       </div>
       <div id="calc-result" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">
-        <div style="color:var(--faint);font-size:13px;">Ingresa SL en pts y riesgo para calcular</div>
+        <div style="color:var(--faint);font-size:13px;">Ingresa tu riesgo y publica el SL en la señal para calcular</div>
       </div>
       ${saveBtn}
     </div>`;
@@ -1790,8 +1792,11 @@ function sgCalcBlock(inst, myPos, signalId) {
 
 function sgCalc() {
   const inst = document.getElementById('calc-inst')?.value  || 'MNQ';
-  const sl   = parseFloat(document.getElementById('calc-sl')?.value)   || 0;
+  const sl   = parseFloat(document.getElementById('sg-sl')?.value) || 0;
   const risk = parseFloat(document.getElementById('calc-risk')?.value) || 0;
+  // Sync display badge with the global SL field
+  const badge = document.getElementById('calc-sl-display');
+  if (badge) badge.textContent = sl || '—';
   const el   = document.getElementById('calc-result');
   if (!el) return;
   const ppp  = SG_PPP[inst] || 2;
@@ -1903,7 +1908,7 @@ async function renderSgAdmin(signal, today, el) {
         </div>
         <div>
           <div class="sg-label">Stop Loss (pts)</div>
-          <input type="number" id="sg-sl" class="sg-input" step="0.25" placeholder="ej: 20" value="${signal?.sl_pts||''}">
+          <input type="number" id="sg-sl" class="sg-input" step="0.25" placeholder="ej: 20" value="${signal?.sl_pts||''}" oninput="sgCalc()">
         </div>
       </div>
       <div style="margin-bottom:16px;">
@@ -1927,8 +1932,8 @@ async function renderSgAdmin(signal, today, el) {
     </div>
 
     ${canDelete() ? sgUserManager(allUsers) : ''}`;
-  // Auto-calc if admin has pre-saved values
-  if (adminPos?.sl_pts || adminPos?.risk_usd) setTimeout(() => sgCalc(), 0);
+  // Auto-calc on load so the SL badge and result initialize
+  setTimeout(() => sgCalc(), 0);
 }
 
 // ─── TRADER CARDS (admin view) ────────────────────────────
@@ -2064,7 +2069,7 @@ async function saveAdminCalc(signalId) {
   const inst   = document.getElementById('calc-inst')?.value || 'MNQ';
   const ppp    = SG_PPP[inst] || 2;
   const risk   = parseFloat(document.getElementById('calc-risk')?.value) || null;
-  const sl_pts = parseFloat(document.getElementById('calc-sl')?.value)   || null;
+  const sl_pts = parseFloat(document.getElementById('sg-sl')?.value)     || null;
   const cts    = (risk && sl_pts && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
   const { error } = await sb.from('trader_positions')
     .upsert({ signal_id: signalId, user_id: currentUser.id,
@@ -2146,7 +2151,8 @@ async function publishSignal() {
 
 function sgVariation(idx) {
   if (idx === 0) return 0;
-  const pool = [-10,-9,-8,-7,-6,-5,-4,-3,3,4,5,6,7,8,9,10];
+  // ±0.5 a 2 pts — diferencia mínima para evitar detección, nunca cancela el spread
+  const pool = [-2, -1.75, -1.5, -1.25, -1, -0.75, -0.5, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
