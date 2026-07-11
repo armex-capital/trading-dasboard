@@ -539,9 +539,9 @@ function goTo(page) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'trader_positions' },
         () => { loadSenales(); })
       .subscribe();
-    // Poll fallback every 5s for traders (in case Realtime doesn't fire due to RLS)
+    // Poll every 5s for traders — updates only numbers, no flash
     if (userProfile?.role !== 'admin') {
-      _sgPoll = setInterval(() => loadSenales(), 5000);
+      _sgPoll = setInterval(() => refreshSenalesNums(), 5000);
     }
   }
 }
@@ -1752,7 +1752,7 @@ function sgBanner(signal, entryPrice) {
     <div style="background:${bg};border:4px solid ${border};border-radius:20px;padding:36px 28px;text-align:center;margin-bottom:20px;">
       <div style="font-size:72px;font-weight:900;color:${color};line-height:1;margin-bottom:10px;letter-spacing:2px;">${dirText}</div>
       <div style="font-size:30px;font-weight:800;color:${color};text-transform:uppercase;letter-spacing:4px;margin-bottom:18px;opacity:.9;">${orderText}</div>
-      <div style="font-size:56px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:1px;">${priceStr}</div>
+      <div id="sg-entry-price" style="font-size:56px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:1px;">${priceStr}</div>
       <div style="font-size:15px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:3px;">${signal.instrument} &nbsp;·&nbsp; $${signal.ppp}/pt</div>
       ${signal.notes ? `<div style="background:rgba(255,255,255,.07);border-radius:10px;padding:10px 16px;margin-top:16px;font-size:14px;color:rgba(255,255,255,.7);">${signal.notes}</div>` : ''}
     </div>`;
@@ -2011,7 +2011,7 @@ async function renderSgTrader(signal, el) {
         ${sl_pts ? `
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Stop Loss del setup</span>
-          <span style="font-size:22px;font-weight:800;color:var(--red);">${sl_pts} pts</span>
+          <span id="sg-sl-live" style="font-size:22px;font-weight:800;color:var(--red);">${sl_pts} pts</span>
         </div>` : `
         <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:14px;text-align:center;color:var(--faint);font-size:13px;">
           El administrador aún no definió el Stop Loss
@@ -2040,6 +2040,48 @@ async function renderSgTrader(signal, el) {
         <button class="btn-outline" onclick="loadSenales()">🔄 Actualizar señal</button>
       </div>
     </div>`;
+}
+
+// Actualiza solo precio, SL y contratos sin re-renderizar la página
+async function refreshSenalesNums() {
+  const priceEl = document.getElementById('sg-entry-price');
+  // Si no existe el banner, la señal no está montada — hacer render completo
+  if (!priceEl) { loadSenales(); return; }
+
+  const today = new Date().toISOString().split('T')[0];
+  const { data: signal } = await sb.from('trade_signals').select('*').eq('signal_date', today).maybeSingle();
+  if (!signal) return;
+
+  const { data: pos } = await sb.from('trader_positions')
+    .select('*').eq('signal_id', signal.id).eq('user_id', currentUser.id).maybeSingle();
+
+  const ppp       = SG_PPP[signal.instrument] || 2;
+  const sl_pts    = signal.sl_pts || 0;
+  const variation = pos?.entry_variation ?? 0;
+  const entryPrice = pos?.entry_price ?? (signal.order_type === 'MARKET' ? signal.base_price : signal.base_price + variation);
+
+  // Precio de entrada
+  priceEl.textContent = Number(entryPrice).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  // SL
+  const slEl = document.getElementById('sg-sl-live');
+  if (slEl) slEl.textContent = sl_pts ? sl_pts + ' pts' : '—';
+
+  // Contratos (solo si el trader no está editando el campo de riesgo)
+  const riskInput = document.getElementById('my-risk');
+  const isEditing = riskInput && document.activeElement === riskInput;
+  if (!isEditing) {
+    const risk = pos?.risk_usd || parseFloat(riskInput?.value) || 0;
+    const cts  = (risk && sl_pts > 0) ? Math.floor(risk / (sl_pts * ppp)) : null;
+    const ctsEl = document.getElementById('my-cts');
+    if (ctsEl) {
+      ctsEl.innerHTML = cts
+        ? `<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Contratos</div>
+           <div style="font-size:52px;font-weight:900;color:var(--blue);line-height:1;">${cts}</div>
+           <div style="font-size:11px;color:var(--faint);margin-top:4px;">$${Number(risk).toLocaleString()} ÷ (${sl_pts}pts×$${ppp}) = ${cts} ctrs</div>`
+        : `<div style="color:var(--faint);font-size:13px;">${sl_pts ? 'Ingresa tu riesgo para calcular contratos' : 'Esperando SL del administrador'}</div>`;
+    }
+  }
 }
 
 function calcMyCts(ppp, sl_pts) {
