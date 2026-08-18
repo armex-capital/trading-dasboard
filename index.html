@@ -408,13 +408,11 @@ function progressBar(current, target, lossLimit) {
 // ══════════════════════════════════════
 // CONSISTENCIA / "CÓMO ARREGLARLO"
 // ══════════════════════════════════════
-function renderConsistencyBlock(acc) {
-  if (typeof acc.consistencia !== 'number') return '';
+function consistencyPlan(acc) {
+  if (typeof acc.consistencia !== 'number') return null;
   const bad = acc.consistencia > 50;
   const profit = Number(acc.current_pnl||0);
-  let html = `<div style="font-size:12px;margin-top:8px;padding:6px 10px;border-radius:6px;background:${bad?'rgba(220,60,60,.14)':'rgba(60,180,100,.14)'};color:${bad?'var(--red)':'var(--green)'}">
-    Consistencia (mejor día/total)${acc.dias_operados?` · ${acc.dias_operados}d operados`:''}: <strong>${acc.consistencia.toFixed(1)}%</strong>${bad?' — excede 50%':''}
-  </div>`;
+  const plan = { bad, consistencia: acc.consistencia, diasOperados: acc.dias_operados||null };
   if (bad) {
     const bestDay = (acc.consistencia/100)*profit;
     const targetRatio = 0.49;
@@ -422,14 +420,34 @@ function renderConsistencyBlock(acc) {
     const hasTp = typeof acc.profit_target === 'number' && acc.profit_target>0;
     const targetTotal = hasTp ? Math.max(targetTotalConsistencia, acc.profit_target) : targetTotalConsistencia;
     const faltaTotal = Math.max(0, targetTotal - profit);
-    const op2 = faltaTotal/2, op3 = faltaTotal/3;
-    const limitadoPorTp = hasTp && acc.profit_target >= targetTotalConsistencia;
-    const explicacion = limitadoPorTp
-      ? `esto ya cubre el TP y de paso deja el mejor día en ${(bestDay/targetTotal*100).toFixed(1)}% del total`
+    plan.op2 = faltaTotal/2;
+    plan.op3 = faltaTotal/3;
+    plan.limitadoPorTp = hasTp && acc.profit_target >= targetTotalConsistencia;
+    plan.bestDayPctFinal = bestDay/targetTotal*100;
+  }
+  return plan;
+}
+function consistencyInline(acc) {
+  const p = consistencyPlan(acc);
+  if (!p) return '';
+  if (!p.bad) return `<div style="font-size:11px;margin-top:4px;color:var(--green)">✅ Consistencia ${p.consistencia.toFixed(1)}% — sin problema</div>`;
+  return `<div style="font-size:11px;margin-top:4px;padding:5px 8px;border-radius:5px;background:rgba(220,60,60,.14);color:var(--red)">
+    ⚠️ Consistencia ${p.consistencia.toFixed(1)}% — necesita <b>2d de ${fmtUSD(p.op2)}</b> o <b>3d de ${fmtUSD(p.op3)}</b>
+  </div>`;
+}
+function renderConsistencyBlock(acc) {
+  const p = consistencyPlan(acc);
+  if (!p) return '';
+  let html = `<div style="font-size:12px;margin-top:8px;padding:6px 10px;border-radius:6px;background:${p.bad?'rgba(220,60,60,.14)':'rgba(60,180,100,.14)'};color:${p.bad?'var(--red)':'var(--green)'}">
+    Consistencia (mejor día/total)${p.diasOperados?` · ${p.diasOperados}d operados`:''}: <strong>${p.consistencia.toFixed(1)}%</strong>${p.bad?' — excede 50%':''}
+  </div>`;
+  if (p.bad) {
+    const explicacion = p.limitadoPorTp
+      ? `esto ya cubre el TP y de paso deja el mejor día en ${p.bestDayPctFinal.toFixed(1)}% del total`
       : `para que el mejor día quede en ~49% del total`;
     html += `<div style="font-size:12px;margin-top:6px;padding:8px 10px;border-radius:6px;border:1px dashed var(--red)">
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:3px">Cómo arreglarlo</div>
-      Haz <b>2 días de ${fmtUSD(op2)}</b> o <b>3 días de ${fmtUSD(op3)}</b> (no todo en un solo día) — ${explicacion}.
+      Haz <b>2 días de ${fmtUSD(p.op2)}</b> o <b>3 días de ${fmtUSD(p.op3)}</b> (no todo en un solo día) — ${explicacion}.
     </div>`;
   }
   return html;
@@ -448,16 +466,47 @@ function accountSort(a, b) {
   }
   return new Date(a.created_at||0) - new Date(b.created_at||0);
 }
-function openAccountDetail(acc) {
+async function openAccountDetail(acc) {
+  setModal(`${acc.firm} #${acc.account_number||'—'}`, '<div class="loading-center"><div class="spinner"></div></div>', [{ label:'Cerrar', cls:'btn-ghost', fn:'closeModal()' }]);
+  const [{ data: trades }, { data: events }] = await Promise.all([
+    sb.from('trading_trades').select('*').eq('account_id', acc.id).order('trade_date',{ascending:false}),
+    sb.from('trading_events').select('*').eq('account_id', acc.id).order('event_date',{ascending:false}),
+  ]);
+  const trs = trades||[], evts = events||[];
+  const winTrades = trs.filter(t=>Number(t.pnl_net)>0).length;
+  const lossTrades = trs.filter(t=>Number(t.pnl_net)<0).length;
+  const tradeRows = trs.length ? trs.map(t=>`
+    <tr>
+      <td style="font-size:11px">${fmtDate(t.trade_date)}</td>
+      <td style="font-size:11px">${t.contract||'—'}</td>
+      <td style="font-size:11px;text-transform:uppercase">${t.direction||'—'}</td>
+      <td style="font-size:11px">${t.size||'—'}</td>
+      <td style="font-size:11px">${t.entry_price??'—'} → ${t.exit_price??'—'}</td>
+      <td style="font-size:11px;font-weight:700;color:${Number(t.pnl_net)>=0?'var(--green)':'var(--red)'}">${Number(t.pnl_net)>=0?'+':''}${fmtUSD(t.pnl_net)}</td>
+    </tr>`).join('') : '<tr><td colspan="6"><div style="font-size:11px;color:var(--faint);padding:8px">Sin trades registrados todavía</div></td></tr>';
+  const evtRows = evts.length ? evts.slice(0,10).map(e=>`
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0">
+      <span>${fmtDate(e.event_date)} · ${eventLabel(e.event_type)}${typeof e.win_rate==='number'?` · Win ${e.win_rate.toFixed(0)}%`:''}</span>
+      <span style="color:${Number(e.amount)>=0?'var(--green)':'var(--red)'}">${Number(e.amount)>=0?'+':''}${fmtUSD(e.amount)}</span>
+    </div>`).join('') : '<div style="font-size:11px;color:var(--faint)">Sin movimientos</div>';
+
   setModal(`${acc.firm} #${acc.account_number||'—'}`, `
     <div style="margin-bottom:10px">${phaseBadge(acc.phase)} ${typeBadge(acc.account_type)}</div>
     ${acc.phase==='evaluation' ? progressBar(Number(acc.current_pnl||0),Number(acc.profit_target),Number(acc.max_loss_limit)) : `<div style="font-size:14px;color:${Number(acc.current_pnl)>=0?'var(--green)':'var(--red)'}">P&L: ${Number(acc.current_pnl)>=0?'+':''}${fmtUSD(acc.current_pnl)}</div>`}
     ${renderConsistencyBlock(acc)}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-size:12px">
-      <div><span style="color:var(--muted)">Win rate</span><div style="font-weight:600">${typeof acc.win_rate==='number'?acc.win_rate.toFixed(2)+'%':'—'}</div></div>
+      <div><span style="color:var(--muted)">Win rate (plataforma)</span><div style="font-weight:600">${typeof acc.win_rate==='number'?acc.win_rate.toFixed(2)+'%':'—'}</div></div>
       <div><span style="color:var(--muted)">Profit factor</span><div style="font-weight:600">${typeof acc.profit_factor==='number'?acc.profit_factor.toFixed(2):'—'}</div></div>
     </div>
+    ${trs.length ? `<div style="margin-top:6px;font-size:11px;color:var(--muted)">Trades registrados: ${trs.length} (${winTrades}W / ${lossTrades}L)</div>` : ''}
     ${acc.notes?`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border2);font-size:12px;color:var(--muted)">${acc.notes}</div>`:''}
+    <div style="margin-top:14px;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">📒 Bitácora de trades</div>
+    <div style="max-height:220px;overflow-y:auto;margin-top:6px">
+      <table><thead><tr><th>Fecha</th><th>Contrato</th><th>Dir</th><th>Size</th><th>Entrada→Salida</th><th>P&L</th></tr></thead>
+      <tbody>${tradeRows}</tbody></table>
+    </div>
+    <div style="margin-top:14px;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">🕒 Movimientos / resultados diarios</div>
+    <div style="margin-top:6px">${evtRows}</div>
   `, [{ label:'Cerrar', cls:'btn-ghost', fn:'closeModal()' }]);
 }
 
@@ -624,6 +673,12 @@ async function loadDashboard() {
                             .reduce((s,e)=>s+Number(e.amount_usd||e.amount||0),0);
   const enJuegoTotal  = enJuegoUSD + enJuegoFeesUSD;
 
+  // ── RESUMEN RÁPIDO (headline, basado en el P&L en vivo de cada cuenta) ──
+  const capitalFondeadoTotal = fundedAccs.reduce((s,a)=>s+Number(a.account_size||0),0);
+  const gananciaFondeadaLive = fundedAccs.reduce((s,a)=>s+Number(a.current_pnl||0),0);
+  const gananciaEvalLive     = evalAccs.reduce((s,a)=>s+Number(a.current_pnl||0),0);
+  const cuentasConsistenciaMal = accs.filter(a=>typeof a.consistencia==='number' && a.consistencia>50).length;
+
   // ── ESTADÍSTICAS DE EVALUACIÓN ──
   // Tasa de éxito
   const completed = fundedAccs.length + burnedAccs.length;
@@ -704,6 +759,13 @@ async function loadDashboard() {
   }).join('') : '<tr><td colspan="4"><div class="empty-state">Sin movimientos</div></td></tr>';
 
   el.innerHTML = `
+    <div class="section-divider">🔎 Resumen general</div>
+    <div class="stats-grid cols4" style="margin-bottom:20px">
+      <div class="stat-card blue"><div class="s-label">Capital fondeado (real)</div><div class="s-val">${fmtUSD(capitalFondeadoTotal)}</div><div class="s-sub">${fundedAccs.length} cuenta${fundedAccs.length!==1?'s':''} fondeada${fundedAccs.length!==1?'s':''}</div></div>
+      <div class="stat-card ${gananciaFondeadaLive>=0?'green':'red'}"><div class="s-label">Ganancia en fondeadas</div><div class="s-val">${gananciaFondeadaLive>=0?'+':''}${fmtUSD(gananciaFondeadaLive)}</div><div class="s-sub">P&L acumulado desde fondeo</div></div>
+      <div class="stat-card ${gananciaEvalLive>=0?'green':'red'}"><div class="s-label">Ganancia en evaluación</div><div class="s-val">${gananciaEvalLive>=0?'+':''}${fmtUSD(gananciaEvalLive)}</div><div class="s-sub">${evalAccs.length} cuenta${evalAccs.length!==1?'s':''} activa${evalAccs.length!==1?'s':''}</div></div>
+      <div class="stat-card ${cuentasConsistenciaMal>0?'red':'green'}"><div class="s-label">Alerta de consistencia</div><div class="s-val">${cuentasConsistenciaMal}</div><div class="s-sub">${cuentasConsistenciaMal>0?'cuenta(s) por arreglar — ver Cuentas':'todo en orden'}</div></div>
+    </div>
     <div class="section-divider">💵 P&L Real — cuentas fondeadas y quemadas</div>
     <div class="stats-grid cols4">
       <div class="stat-card blue"><div class="s-label">Invertido (real)</div><div class="s-val">${fmtUSD(realInvUSD)}</div><div class="s-sub">Cuentas terminadas + fees</div><div class="s-sub2">Evals activas: ${fmtUSD(enJuegoTotal)} (en juego)</div></div>
@@ -786,12 +848,13 @@ async function loadCuentas() {
   const { data } = await q;
   const accs = (data||[]).sort(accountSort);
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🏦</div>Sin cuentas. Agrega la primera.</div>'; return; }
+  el.innerHTML = accountTableHTML(accs, { showTrader:true, showCost:true, traderNameFn:a=>a.trading_traders?.name });
+}
+
+function accountTableHTML(accs, opts={}) {
   const rows = accs.map(a=>{
     const pnl=Number(a.current_pnl||0), tgt=Number(a.profit_target||0), mll=Number(a.max_loss_limit||0);
-    const consBadge = typeof a.consistencia==='number'
-      ? `<div style="font-size:10px;margin-top:3px;color:${a.consistencia>50?'var(--red)':'var(--green)'}">Consistencia: ${a.consistencia.toFixed(1)}%${a.consistencia>50?' ⚠️':''}</div>`
-      : '';
-    const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consBadge
+    const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consistencyInline(a)
                : a.phase==='funded'     ? '<span style="color:var(--green)">✅ Fondeada</span>'
                :                          '<span style="color:var(--red)">🔥 Quemada</span>';
     const costoCell = a.cost_mxn
@@ -807,9 +870,9 @@ async function loadCuentas() {
       <td><strong>${a.firm}</strong><div style="font-size:11px;color:var(--muted)">#${a.account_number||'—'} · ${a.account_holder}</div>${emailCell}</td>
       <td>${phaseBadge(a.phase)}</td><td>${typeBadge(a.account_type)}</td>
       <td>${fmtUSD(a.account_size)}</td>
-      <td style="font-size:12px">${a.trading_traders?.name||'—'}</td>
-      <td>${prog}</td><td>${costoCell}</td>
-      <td style="font-size:12px">${payCell}</td>
+      ${opts.showTrader?`<td style="font-size:12px">${opts.traderNameFn?opts.traderNameFn(a):'—'}</td>`:''}
+      <td>${prog}</td>
+      ${opts.showCost?`<td>${costoCell}</td><td style="font-size:12px">${payCell}</td>`:''}
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick='openAccountDetail(${JSON.stringify(a)})' title="Detalle">🔍</button>
         <button class="btn btn-ghost btn-sm" onclick='editCuenta(${JSON.stringify(a)})'>✏️</button>
@@ -818,8 +881,8 @@ async function loadCuentas() {
       </td>
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class="table-card"><table>
-    <thead><tr><th>Cuenta</th><th>Fase</th><th>Tipo</th><th>Monto</th><th>Trader</th><th>Progreso</th><th>Costo</th><th>Cobro</th><th>Acciones</th></tr></thead>
+  return `<div class="table-card"><table>
+    <thead><tr><th>Cuenta</th><th>Fase</th><th>Tipo</th><th>Monto</th>${opts.showTrader?'<th>Trader</th>':''}<th>Progreso / Consistencia</th>${opts.showCost?'<th>Costo</th><th>Cobro</th>':''}<th>Acciones</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1547,35 +1610,11 @@ function tryConfigUnlock() {
 
 async function renderConfigPersonal(el) {
   el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
-  const [{ data: accounts }, { data: events }] = await Promise.all([
-    sb.from('trading_accounts').select('*').eq('is_personal', true).order('firm'),
-    sb.from('trading_events').select('*').order('event_date',{ascending:false}),
-  ]);
+  const { data: accounts } = await sb.from('trading_accounts').select('*').eq('is_personal', true).order('firm');
   const accs = (accounts||[]).sort(accountSort);
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🔒</div>Sin cuentas personales registradas.</div>'; return; }
-  const accIds = new Set(accs.map(a=>a.id));
-  const evts = (events||[]).filter(e=>accIds.has(e.account_id));
-
   const totalPnl = accs.reduce((s,a)=>s+Number(a.current_pnl||0),0);
-
-  const cards = accs.map(a=>{
-    const myEvts = evts.filter(e=>e.account_id===a.id).slice(0,5);
-    const evtRows = myEvts.length ? myEvts.map(e=>`
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0">
-        <span>${fmtDate(e.event_date)} · ${eventLabel(e.event_type)}</span>
-        <span style="color:${Number(e.amount)>=0?'var(--green)':'var(--red)'}">${Number(e.amount)>=0?'+':''}${fmtUSD(e.amount)}</span>
-      </div>`).join('') : '<div style="font-size:11px;color:var(--faint)">Sin movimientos</div>';
-    return `
-    <div class="table-card" style="margin-bottom:16px;padding:16px 18px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div><strong>${a.firm}</strong><div style="font-size:11px;color:var(--muted)">#${a.account_number||'—'}</div></div>
-        ${phaseBadge(a.phase)}
-      </div>
-      ${a.phase==='evaluation' ? progressBar(Number(a.current_pnl||0),Number(a.profit_target),Number(a.max_loss_limit)) : `<div style="font-size:13px;color:${Number(a.current_pnl)>=0?'var(--green)':'var(--red)'}">P&L: ${Number(a.current_pnl)>=0?'+':''}${fmtUSD(a.current_pnl)}</div>`}
-      ${renderConsistencyBlock(a)}
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2)">${evtRows}</div>
-    </div>`;
-  }).join('');
+  const tableHTML = accountTableHTML(accs, { showTrader:false, showCost:false });
 
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
@@ -1585,7 +1624,7 @@ async function renderConfigPersonal(el) {
     <div class="stats-grid cols4" style="margin-bottom:20px">
       <div class="stat-card ${totalPnl>=0?'green':'red'}"><div class="s-label">P&L total (personal)</div><div class="s-val">${totalPnl>=0?'+':''}${fmtUSD(totalPnl)}</div><div class="s-sub">No incluido en el global de la empresa</div></div>
     </div>
-    <div class="two-cols">${cards}</div>`;
+    ${tableHTML}`;
 }
 
 // ══════════════════════════════════════
