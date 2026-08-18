@@ -228,7 +228,6 @@ tr:hover td{background:rgba(255,255,255,.02);}
       <div class="nav-item" onclick="goTo('traders')"><span class="nav-icon">👥</span>Traders</div>
       <div class="nav-item" onclick="goTo('equipos')"><span class="nav-icon">💻</span>Equipos</div>
       <div class="nav-item" onclick="goTo('rendimiento')"><span class="nav-icon">🏆</span>Rendimiento</div>
-      <div class="nav-item" onclick="goTo('senales')"><span class="nav-icon">🎯</span>Señales</div>
       <div class="nav-item" onclick="goTo('config')"><span class="nav-icon">⚙️</span>Configuración</div>
     </nav>
     <div class="sidebar-footer"><button class="btn-logout" onclick="doLogout()">Cerrar sesión</button></div>
@@ -338,13 +337,6 @@ tr:hover td{background:rgba(255,255,255,.02);}
       <div id="rendimiento-content"><div class="loading-center"><div class="spinner"></div></div></div>
     </div>
 
-    <div id="page-senales" class="page">
-      <div class="page-header">
-        <div><h1>🎯 Señales</h1><p>Entradas del día para el equipo</p></div>
-      </div>
-      <div id="senales-content"><div class="loading-center"><div class="spinner"></div></div></div>
-    </div>
-
     <div id="page-config" class="page">
       <div class="page-header"><div><h1>Configuración</h1><p>Preferencias generales del sistema</p></div></div>
       <div id="config-content"></div>
@@ -411,6 +403,62 @@ function progressBar(current, target, lossLimit) {
     <span class="progress-label">${fmtN(current)}/${fmtN(target)}</span>
   </div>
   <div style="font-size:10px;color:var(--muted);margin-top:2px;">Faltan: ${fmtUSD(Math.max(0,target-current))} · MLL: ${fmtUSD(lossLimit)}</div>`;
+}
+
+// ══════════════════════════════════════
+// CONSISTENCIA / "CÓMO ARREGLARLO"
+// ══════════════════════════════════════
+function renderConsistencyBlock(acc) {
+  if (typeof acc.consistencia !== 'number') return '';
+  const bad = acc.consistencia > 50;
+  const profit = Number(acc.current_pnl||0);
+  let html = `<div style="font-size:12px;margin-top:8px;padding:6px 10px;border-radius:6px;background:${bad?'rgba(220,60,60,.14)':'rgba(60,180,100,.14)'};color:${bad?'var(--red)':'var(--green)'}">
+    Consistencia (mejor día/total)${acc.dias_operados?` · ${acc.dias_operados}d operados`:''}: <strong>${acc.consistencia.toFixed(1)}%</strong>${bad?' — excede 50%':''}
+  </div>`;
+  if (bad) {
+    const bestDay = (acc.consistencia/100)*profit;
+    const targetRatio = 0.49;
+    const targetTotalConsistencia = bestDay/targetRatio;
+    const hasTp = typeof acc.profit_target === 'number' && acc.profit_target>0;
+    const targetTotal = hasTp ? Math.max(targetTotalConsistencia, acc.profit_target) : targetTotalConsistencia;
+    const faltaTotal = Math.max(0, targetTotal - profit);
+    const op2 = faltaTotal/2, op3 = faltaTotal/3;
+    const limitadoPorTp = hasTp && acc.profit_target >= targetTotalConsistencia;
+    const explicacion = limitadoPorTp
+      ? `esto ya cubre el TP y de paso deja el mejor día en ${(bestDay/targetTotal*100).toFixed(1)}% del total`
+      : `para que el mejor día quede en ~49% del total`;
+    html += `<div style="font-size:12px;margin-top:6px;padding:8px 10px;border-radius:6px;border:1px dashed var(--red)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:3px">Cómo arreglarlo</div>
+      Haz <b>2 días de ${fmtUSD(op2)}</b> o <b>3 días de ${fmtUSD(op3)}</b> (no todo en un solo día) — ${explicacion}.
+    </div>`;
+  }
+  return html;
+}
+function phaseRank(p) { return {funded:0, evaluation:1, burned:2}[p] ?? 3; }
+function progressPct(acc) {
+  if (!acc.profit_target) return 0;
+  return Math.max(0, Number(acc.current_pnl||0)) / Number(acc.profit_target);
+}
+function accountSort(a, b) {
+  const pr = phaseRank(a.phase) - phaseRank(b.phase);
+  if (pr !== 0) return pr;
+  if (a.phase === 'evaluation') {
+    const pd = progressPct(b) - progressPct(a);
+    if (pd !== 0) return pd;
+  }
+  return new Date(a.created_at||0) - new Date(b.created_at||0);
+}
+function openAccountDetail(acc) {
+  setModal(`${acc.firm} #${acc.account_number||'—'}`, `
+    <div style="margin-bottom:10px">${phaseBadge(acc.phase)} ${typeBadge(acc.account_type)}</div>
+    ${acc.phase==='evaluation' ? progressBar(Number(acc.current_pnl||0),Number(acc.profit_target),Number(acc.max_loss_limit)) : `<div style="font-size:14px;color:${Number(acc.current_pnl)>=0?'var(--green)':'var(--red)'}">P&L: ${Number(acc.current_pnl)>=0?'+':''}${fmtUSD(acc.current_pnl)}</div>`}
+    ${renderConsistencyBlock(acc)}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-size:12px">
+      <div><span style="color:var(--muted)">Win rate</span><div style="font-weight:600">${typeof acc.win_rate==='number'?acc.win_rate.toFixed(2)+'%':'—'}</div></div>
+      <div><span style="color:var(--muted)">Profit factor</span><div style="font-weight:600">${typeof acc.profit_factor==='number'?acc.profit_factor.toFixed(2):'—'}</div></div>
+    </div>
+    ${acc.notes?`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border2);font-size:12px;color:var(--muted)">${acc.notes}</div>`:''}
+  `, [{ label:'Cerrar', cls:'btn-ghost', fn:'closeModal()' }]);
 }
 
 // ══════════════════════════════════════
@@ -508,23 +556,15 @@ function showApp() {
   document.getElementById('app').classList.add('visible');
   document.getElementById('dash-date').textContent = new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const isTrader = userProfile?.role === 'trader';
-  document.querySelectorAll('.nav-item').forEach(n => {
-    n.style.display = (isTrader && !n.getAttribute('onclick')?.includes("'senales'")) ? 'none' : '';
-  });
-  goTo(isTrader ? 'senales' : 'dashboard');
+  document.querySelectorAll('.nav-item').forEach(n => { n.style.display = ''; });
+  goTo(isTrader ? 'rendimiento' : 'dashboard');
 }
 document.getElementById('login-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
 // ══════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════
-let _sgChannel = null;
-let _sgPoll    = null;
-let _sgLastHash = null;
 function goTo(page) {
-  // Desuscribir realtime al salir de Señales
-  if (_sgChannel) { sb.removeChannel(_sgChannel); _sgChannel = null; }
-  if (_sgPoll)    { clearInterval(_sgPoll); _sgPoll = null; }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
@@ -537,20 +577,6 @@ function goTo(page) {
   if (page==='equipos')     { loadEquipoTraderFilter(); loadEquipos(); }
   if (page==='rendimiento') loadRendimiento();
   if (page==='config')      loadConfig();
-  if (page==='senales')     {
-    loadSenales();
-    // Realtime via postgres_changes
-    _sgChannel = sb.channel('sg-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trade_signals' },
-        () => { loadSenales(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trader_positions' },
-        () => { loadSenales(); })
-      .subscribe();
-    // Poll every 5s for traders — updates only numbers, no flash
-    if (userProfile?.role !== 'admin') {
-      _sgPoll = setInterval(() => refreshSenalesNums(), 5000);
-    }
-  }
 }
 
 // ══════════════════════════════════════
@@ -758,11 +784,14 @@ async function loadCuentas() {
   if (firma) q=q.eq('firm',firma); if (fase) q=q.eq('phase',fase);
   if (tipo)  q=q.eq('account_type',tipo); if (trader) q=q.eq('trader_id',trader);
   const { data } = await q;
-  const accs = data||[];
+  const accs = (data||[]).sort(accountSort);
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🏦</div>Sin cuentas. Agrega la primera.</div>'; return; }
   const rows = accs.map(a=>{
     const pnl=Number(a.current_pnl||0), tgt=Number(a.profit_target||0), mll=Number(a.max_loss_limit||0);
-    const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)
+    const consBadge = typeof a.consistencia==='number'
+      ? `<div style="font-size:10px;margin-top:3px;color:${a.consistencia>50?'var(--red)':'var(--green)'}">Consistencia: ${a.consistencia.toFixed(1)}%${a.consistencia>50?' ⚠️':''}</div>`
+      : '';
+    const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consBadge
                : a.phase==='funded'     ? '<span style="color:var(--green)">✅ Fondeada</span>'
                :                          '<span style="color:var(--red)">🔥 Quemada</span>';
     const costoCell = a.cost_mxn
@@ -782,6 +811,7 @@ async function loadCuentas() {
       <td>${prog}</td><td>${costoCell}</td>
       <td style="font-size:12px">${payCell}</td>
       <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick='openAccountDetail(${JSON.stringify(a)})' title="Detalle">🔍</button>
         <button class="btn btn-ghost btn-sm" onclick='editCuenta(${JSON.stringify(a)})'>✏️</button>
         <button class="btn btn-ghost btn-sm" onclick="openModalEvento('${a.id}')">📝</button>
         ${a.phase==='evaluation'?`<button class="btn btn-ghost btn-sm" onclick="openModalUpdatePnl('${a.id}','${a.firm}',${a.current_pnl||0})">📊</button>`:''}
@@ -1521,7 +1551,7 @@ async function renderConfigPersonal(el) {
     sb.from('trading_accounts').select('*').eq('is_personal', true).order('firm'),
     sb.from('trading_events').select('*').order('event_date',{ascending:false}),
   ]);
-  const accs = accounts||[];
+  const accs = (accounts||[]).sort(accountSort);
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🔒</div>Sin cuentas personales registradas.</div>'; return; }
   const accIds = new Set(accs.map(a=>a.id));
   const evts = (events||[]).filter(e=>accIds.has(e.account_id));
@@ -1529,11 +1559,6 @@ async function renderConfigPersonal(el) {
   const totalPnl = accs.reduce((s,a)=>s+Number(a.current_pnl||0),0);
 
   const cards = accs.map(a=>{
-    const badCons = typeof a.consistencia==='number' && a.consistencia>50;
-    const consBlock = typeof a.consistencia==='number' ? `
-      <div class="consistency-row ${badCons?'bad':'ok'}" style="font-size:12px;margin-top:8px;padding:6px 10px;border-radius:6px;background:${badCons?'rgba(220,60,60,.12)':'rgba(60,180,100,.12)'}">
-        Consistencia (mejor día/total)${a.dias_operados?` · ${a.dias_operados}d`:''}: <strong>${a.consistencia.toFixed(1)}%</strong>${badCons?' — excede 50%':''}
-      </div>` : '';
     const myEvts = evts.filter(e=>e.account_id===a.id).slice(0,5);
     const evtRows = myEvts.length ? myEvts.map(e=>`
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0">
@@ -1547,7 +1572,7 @@ async function renderConfigPersonal(el) {
         ${phaseBadge(a.phase)}
       </div>
       ${a.phase==='evaluation' ? progressBar(Number(a.current_pnl||0),Number(a.profit_target),Number(a.max_loss_limit)) : `<div style="font-size:13px;color:${Number(a.current_pnl)>=0?'var(--green)':'var(--red)'}">P&L: ${Number(a.current_pnl)>=0?'+':''}${fmtUSD(a.current_pnl)}</div>`}
-      ${consBlock}
+      ${renderConsistencyBlock(a)}
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2)">${evtRows}</div>
     </div>`;
   }).join('');
