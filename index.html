@@ -1576,11 +1576,29 @@ async function loadRendimiento() {
 // ══════════════════════════════════════
 const CONFIG_PASSWORD = 'Axel0203*';
 let _configUnlocked = false;
+let _configView = 'dashboard';
 
 function loadConfig() {
   const el = document.getElementById('config-content');
   if (!_configUnlocked) { renderConfigLock(el); return; }
-  renderConfigPersonal(el);
+  renderConfigShell(el);
+}
+
+function setConfigView(v) { _configView = v; renderConfigShell(document.getElementById('config-content')); }
+
+function renderConfigShell(el) {
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;gap:6px">
+        <button class="btn ${_configView==='dashboard'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('dashboard')">📊 Dashboard</button>
+        <button class="btn ${_configView==='cuentas'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('cuentas')">🏦 Cuentas</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="_configUnlocked=false;loadConfig()">Bloquear</button>
+    </div>
+    <div id="config-inner"><div class="loading-center"><div class="spinner"></div></div></div>`;
+  const inner = document.getElementById('config-inner');
+  if (_configView === 'dashboard') renderConfigDashboard(inner);
+  else renderConfigPersonal(inner);
 }
 
 function renderConfigLock(el) {
@@ -1609,22 +1627,60 @@ function tryConfigUnlock() {
 }
 
 async function renderConfigPersonal(el) {
-  el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
   const { data: accounts } = await sb.from('trading_accounts').select('*').eq('is_personal', true).order('firm');
   const accs = (accounts||[]).sort(accountSort);
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🔒</div>Sin cuentas personales registradas.</div>'; return; }
+  el.innerHTML = accountTableHTML(accs, { showTrader:false, showCost:true });
+}
+
+async function renderConfigDashboard(el) {
+  const [{ data: accounts }, { data: trades }] = await Promise.all([
+    sb.from('trading_accounts').select('*').eq('is_personal', true),
+    sb.from('trading_trades').select('*,trading_accounts!inner(is_personal)').eq('trading_accounts.is_personal', true),
+  ]);
+  const accs = accounts||[];
+  if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🔒</div>Sin cuentas personales registradas.</div>'; return; }
+  const trs = trades||[];
+
+  const fundedAccs = accs.filter(a=>a.phase==='funded');
+  const evalAccs   = accs.filter(a=>a.phase==='evaluation');
+  const capitalFondeadoTotal = fundedAccs.reduce((s,a)=>s+Number(a.account_size||0),0);
   const totalPnl = accs.reduce((s,a)=>s+Number(a.current_pnl||0),0);
-  const tableHTML = accountTableHTML(accs, { showTrader:false, showCost:false });
+  const cuentasConsistenciaMal = accs.filter(a=>typeof a.consistencia==='number' && a.consistencia>50).length;
+
+  // ── Profit Factor / Win Rate GLOBAL, calculado desde los trades reales ──
+  const wins   = trs.filter(t=>Number(t.pnl_net)>0);
+  const losses = trs.filter(t=>Number(t.pnl_net)<0);
+  const grossWin  = wins.reduce((s,t)=>s+Number(t.pnl_net),0);
+  const grossLoss = Math.abs(losses.reduce((s,t)=>s+Number(t.pnl_net),0));
+  const profitFactorGlobal = grossLoss>0 ? (grossWin/grossLoss) : (grossWin>0 ? Infinity : null);
+  const winRateGlobal = trs.length ? (wins.length/trs.length*100) : null;
+
+  // ── Racha actual (trades ordenados por fecha) ──
+  const sortedTrades = [...trs].sort((a,b)=>new Date(a.trade_date)-new Date(b.trade_date));
+  let racha = 0, rachaTipo = null;
+  for (let i=sortedTrades.length-1; i>=0; i--) {
+    const isWin = Number(sortedTrades[i].pnl_net) > 0;
+    if (rachaTipo === null) { rachaTipo = isWin; racha = 1; }
+    else if (isWin === rachaTipo) racha++;
+    else break;
+  }
 
   el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="section-divider" style="margin:0">🔒 Cuentas personales — Lucid</div>
-      <button class="btn btn-ghost btn-sm" onclick="_configUnlocked=false;loadConfig()">Bloquear</button>
-    </div>
-    <div class="stats-grid cols4" style="margin-bottom:20px">
+    <div class="stats-grid cols4" style="margin-bottom:16px">
+      <div class="stat-card blue"><div class="s-label">Capital fondeado</div><div class="s-val">${fmtUSD(capitalFondeadoTotal)}</div><div class="s-sub">${fundedAccs.length} cuenta${fundedAccs.length!==1?'s':''}</div></div>
       <div class="stat-card ${totalPnl>=0?'green':'red'}"><div class="s-label">P&L total (personal)</div><div class="s-val">${totalPnl>=0?'+':''}${fmtUSD(totalPnl)}</div><div class="s-sub">No incluido en el global de la empresa</div></div>
+      <div class="stat-card blue"><div class="s-label">En evaluación</div><div class="s-val">${evalAccs.length}</div><div class="s-sub">cuentas activas</div></div>
+      <div class="stat-card ${cuentasConsistenciaMal>0?'red':'green'}"><div class="s-label">Alerta consistencia</div><div class="s-val">${cuentasConsistenciaMal}</div><div class="s-sub">${cuentasConsistenciaMal>0?'por arreglar':'todo en orden'}</div></div>
     </div>
-    ${tableHTML}`;
+    <div class="section-divider">📈 Estadística real (todas tus cuentas juntas, desde trades registrados)</div>
+    <div class="stats-grid cols4" style="margin-bottom:16px">
+      <div class="stat-card ${profitFactorGlobal===null?'blue':profitFactorGlobal>=1?'green':'red'}"><div class="s-label">Profit Factor global</div><div class="s-val">${profitFactorGlobal===null?'—':profitFactorGlobal===Infinity?'∞':profitFactorGlobal.toFixed(2)}</div><div class="s-sub">Ganancia bruta / pérdida bruta</div></div>
+      <div class="stat-card ${winRateGlobal===null?'blue':winRateGlobal>=50?'green':'red'}"><div class="s-label">Win rate global</div><div class="s-val">${winRateGlobal===null?'—':winRateGlobal.toFixed(1)+'%'}</div><div class="s-sub">${wins.length}W / ${losses.length}L de ${trs.length}</div></div>
+      <div class="stat-card yellow"><div class="s-label">Racha actual</div><div class="s-val">${racha||'—'}${rachaTipo!==null?(rachaTipo?' 🟢':' 🔴'):''}</div><div class="s-sub">${rachaTipo===null?'sin trades':rachaTipo?'ganadores seguidos':'perdedores seguidos'}</div></div>
+      <div class="stat-card blue"><div class="s-label">Trades registrados</div><div class="s-val">${trs.length}</div><div class="s-sub">en bitácora</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted)">Nota: el Profit Factor y Win Rate aquí se calculan directo de los trades individuales cargados en la bitácora — no del dato que reporta cada plataforma por separado. Entre más trades se registren, más preciso.</div>`;
 }
 
 // ══════════════════════════════════════
