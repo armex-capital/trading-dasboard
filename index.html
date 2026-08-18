@@ -229,6 +229,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
       <div class="nav-item" onclick="goTo('equipos')"><span class="nav-icon">💻</span>Equipos</div>
       <div class="nav-item" onclick="goTo('rendimiento')"><span class="nav-icon">🏆</span>Rendimiento</div>
       <div class="nav-item" onclick="goTo('senales')"><span class="nav-icon">🎯</span>Señales</div>
+      <div class="nav-item" onclick="goTo('config')"><span class="nav-icon">⚙️</span>Configuración</div>
     </nav>
     <div class="sidebar-footer"><button class="btn-logout" onclick="doLogout()">Cerrar sesión</button></div>
   </div>
@@ -343,6 +344,11 @@ tr:hover td{background:rgba(255,255,255,.02);}
       </div>
       <div id="senales-content"><div class="loading-center"><div class="spinner"></div></div></div>
     </div>
+
+    <div id="page-config" class="page">
+      <div class="page-header"><div><h1>Configuración</h1><p>Preferencias generales del sistema</p></div></div>
+      <div id="config-content"></div>
+    </div>
   </div>
 </div>
 
@@ -392,7 +398,7 @@ const phaseBadge = p => ({
 })[p] || p;
 const typeBadge  = t => t==='futures' ? '<span class="badge badge-futures">Futuros</span>' : '<span class="badge badge-cfd">CFD</span>';
 const curBadge   = c => c==='MXN' ? '<span class="badge badge-mxn">MXN</span>' : '<span class="badge badge-usd">USD</span>';
-const eventLabel = t => ({payout:'💸 Payout',burn:'🔥 Quema',monthly_fee:'📅 Fee mensual',activation_fee:'🏷️ Fee activación',other:'📌 Otro'})[t]||t;
+const eventLabel = t => ({payout:'💸 Payout',burn:'🔥 Quema',monthly_fee:'📅 Fee mensual',activation_fee:'🏷️ Fee activación',daily_result:'📊 Resultado diario',other:'📌 Otro'})[t]||t;
 const sourceLabel= s => ({empresa:'🏢 Empresa',aportacion_personal:'👤 Aportación personal',aportacion_tercero:'🤝 Aportación tercero'})[s]||s;
 const catLabel   = c => ({tablet:'📱 Tablet',computadora:'💻 Computadora',modem:'📡 Modem',sim:'📶 SIM / Línea',suscripcion:'🔄 Suscripción',servicio:'⚙️ Servicio',equipo:'💻 Equipo',otro:'📦 Otro'})[c]||c;
 
@@ -530,6 +536,7 @@ function goTo(page) {
   if (page==='traders')     loadTraders();
   if (page==='equipos')     { loadEquipoTraderFilter(); loadEquipos(); }
   if (page==='rendimiento') loadRendimiento();
+  if (page==='config')      loadConfig();
   if (page==='senales')     {
     loadSenales();
     // Realtime via postgres_changes
@@ -559,12 +566,15 @@ async function loadDashboard() {
   const el = document.getElementById('dash-content');
   el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
   const [{ data: accounts }, { data: events }, { data: income }, { data: expenses }] = await Promise.all([
-    sb.from('trading_accounts').select('*'),
+    sb.from('trading_accounts').select('*').eq('is_personal', false),
     sb.from('trading_events').select('*'),
     sb.from('trading_income').select('*'),
     sb.from('trading_expenses').select('*'),
   ]);
-  const accs = accounts||[], evts = events||[], inc = income||[], exp = expenses||[];
+  const accs = accounts||[];
+  const accIds = new Set(accs.map(a=>a.id));
+  const evts = (events||[]).filter(e=>accIds.has(e.account_id));
+  const inc = income||[], exp = expenses||[];
 
   // Segmentar por fase
   const evalAccs   = accs.filter(a=>a.phase==='evaluation');
@@ -742,7 +752,7 @@ async function loadDashboard() {
 async function loadCuentas() {
   const el = document.getElementById('cuentas-content');
   el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
-  let q = sb.from('trading_accounts').select('*,trading_traders(name)').order('created_at',{ascending:false});
+  let q = sb.from('trading_accounts').select('*,trading_traders(name)').eq('is_personal', false).order('created_at',{ascending:false});
   const firma=document.getElementById('f-firma')?.value, fase=document.getElementById('f-fase')?.value;
   const tipo=document.getElementById('f-tipo')?.value, trader=document.getElementById('f-trader')?.value;
   if (firma) q=q.eq('firm',firma); if (fase) q=q.eq('phase',fase);
@@ -790,7 +800,7 @@ async function loadTraderFilter() {
   if (sel) sel.innerHTML='<option value="">Todos los traders</option>'+allTraders.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
 }
 async function loadCuentasFilter() {
-  const { data } = await sb.from('trading_accounts').select('id,firm,account_size,account_number').order('firm');
+  const { data } = await sb.from('trading_accounts').select('id,firm,account_size,account_number').eq('is_personal', false).order('firm');
   const sel = document.getElementById('fm-cuenta');
   if (sel) sel.innerHTML='<option value="">Todas las cuentas</option>'+(data||[]).map(a=>`<option value="${a.id}">${a.firm} ${fmtN(a.account_size)} #${a.account_number||'—'}</option>`).join('');
 }
@@ -940,12 +950,12 @@ async function saveUpdatePnl(id) {
 async function loadMovimientos() {
   const el = document.getElementById('movimientos-content');
   el.innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
-  let q = sb.from('trading_events').select('*,trading_accounts(firm,account_size,account_number)').order('event_date',{ascending:false});
+  let q = sb.from('trading_events').select('*,trading_accounts(firm,account_size,account_number,is_personal)').order('event_date',{ascending:false});
   const tipo=document.getElementById('fm-tipo')?.value, cuenta=document.getElementById('fm-cuenta')?.value;
   if (tipo)   q=q.eq('event_type',tipo);
   if (cuenta) q=q.eq('account_id',cuenta);
   const { data } = await q;
-  const evts = data||[];
+  const evts = (data||[]).filter(e=>!e.trading_accounts?.is_personal);
   if (!evts.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">📝</div>Sin movimientos.</div>'; return; }
   const rows = evts.map(e=>{
     const acc=e.trading_accounts;
@@ -1218,7 +1228,7 @@ async function loadTraders() {
   const el = document.getElementById('traders-content');
   el.innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
   const { data: traders } = await sb.from('trading_traders').select('*').order('name');
-  const { data: accounts } = await sb.from('trading_accounts').select('id,trader_id,firm,account_size,account_number,phase');
+  const { data: accounts } = await sb.from('trading_accounts').select('id,trader_id,firm,account_size,account_number,phase').eq('is_personal', false);
   const ts=traders||[], ac=accounts||[];
   if (!ts.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">👥</div>Sin traders. Agrega el primero.</div>'; return; }
   el.innerHTML = ts.map(t=>{
@@ -1308,10 +1318,12 @@ async function loadRendimiento() {
 
   const [{ data: traders }, { data: accounts }, { data: events }] = await Promise.all([
     sb.from('trading_traders').select('*').order('name'),
-    sb.from('trading_accounts').select('*'),
+    sb.from('trading_accounts').select('*').eq('is_personal', false),
     sb.from('trading_events').select('*'),
   ]);
-  const trs = traders||[], accs = accounts||[], evts = events||[];
+  const trs = traders||[], accs = accounts||[];
+  const accIdsR = new Set(accs.map(a=>a.id));
+  const evts = (events||[]).filter(e=>accIdsR.has(e.account_id));
 
   if (!trs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">👥</div>No hay traders registrados.</div>'; return; }
 
@@ -1464,6 +1476,91 @@ async function loadRendimiento() {
     </div>
     <div class="section-divider">👤 Detalle por trader</div>
     ${traderCards}`;
+}
+
+// ══════════════════════════════════════
+// CONFIGURACIÓN (cuentas personales — con candado)
+// ══════════════════════════════════════
+const CONFIG_PASSWORD = 'Axel0203*';
+let _configUnlocked = false;
+
+function loadConfig() {
+  const el = document.getElementById('config-content');
+  if (!_configUnlocked) { renderConfigLock(el); return; }
+  renderConfigPersonal(el);
+}
+
+function renderConfigLock(el) {
+  el.innerHTML = `
+    <div style="max-width:360px;margin:40px auto 0;">
+      <div class="field"><label>Zona horaria</label>
+        <select disabled style="opacity:.5"><option>América/Ciudad de México (UTC-6)</option></select>
+      </div>
+      <div class="field"><label>Clave de acceso avanzado</label>
+        <input id="config-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')tryConfigUnlock()">
+      </div>
+      <button class="btn btn-blue" onclick="tryConfigUnlock()">Entrar</button>
+      <div id="config-err" style="color:var(--red);font-size:12px;margin-top:8px"></div>
+    </div>`;
+  setTimeout(()=>document.getElementById('config-pass')?.focus(), 50);
+}
+
+function tryConfigUnlock() {
+  const val = document.getElementById('config-pass')?.value || '';
+  if (val === CONFIG_PASSWORD) {
+    _configUnlocked = true;
+    loadConfig();
+  } else {
+    document.getElementById('config-err').textContent = 'Clave incorrecta';
+  }
+}
+
+async function renderConfigPersonal(el) {
+  el.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
+  const [{ data: accounts }, { data: events }] = await Promise.all([
+    sb.from('trading_accounts').select('*').eq('is_personal', true).order('firm'),
+    sb.from('trading_events').select('*').order('event_date',{ascending:false}),
+  ]);
+  const accs = accounts||[];
+  if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🔒</div>Sin cuentas personales registradas.</div>'; return; }
+  const accIds = new Set(accs.map(a=>a.id));
+  const evts = (events||[]).filter(e=>accIds.has(e.account_id));
+
+  const totalPnl = accs.reduce((s,a)=>s+Number(a.current_pnl||0),0);
+
+  const cards = accs.map(a=>{
+    const badCons = typeof a.consistencia==='number' && a.consistencia>50;
+    const consBlock = typeof a.consistencia==='number' ? `
+      <div class="consistency-row ${badCons?'bad':'ok'}" style="font-size:12px;margin-top:8px;padding:6px 10px;border-radius:6px;background:${badCons?'rgba(220,60,60,.12)':'rgba(60,180,100,.12)'}">
+        Consistencia (mejor día/total)${a.dias_operados?` · ${a.dias_operados}d`:''}: <strong>${a.consistencia.toFixed(1)}%</strong>${badCons?' — excede 50%':''}
+      </div>` : '';
+    const myEvts = evts.filter(e=>e.account_id===a.id).slice(0,5);
+    const evtRows = myEvts.length ? myEvts.map(e=>`
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:3px 0">
+        <span>${fmtDate(e.event_date)} · ${eventLabel(e.event_type)}</span>
+        <span style="color:${Number(e.amount)>=0?'var(--green)':'var(--red)'}">${Number(e.amount)>=0?'+':''}${fmtUSD(e.amount)}</span>
+      </div>`).join('') : '<div style="font-size:11px;color:var(--faint)">Sin movimientos</div>';
+    return `
+    <div class="table-card" style="margin-bottom:16px;padding:16px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div><strong>${a.firm}</strong><div style="font-size:11px;color:var(--muted)">#${a.account_number||'—'}</div></div>
+        ${phaseBadge(a.phase)}
+      </div>
+      ${a.phase==='evaluation' ? progressBar(Number(a.current_pnl||0),Number(a.profit_target),Number(a.max_loss_limit)) : `<div style="font-size:13px;color:${Number(a.current_pnl)>=0?'var(--green)':'var(--red)'}">P&L: ${Number(a.current_pnl)>=0?'+':''}${fmtUSD(a.current_pnl)}</div>`}
+      ${consBlock}
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2)">${evtRows}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="section-divider" style="margin:0">🔒 Cuentas personales — Lucid</div>
+      <button class="btn btn-ghost btn-sm" onclick="_configUnlocked=false;loadConfig()">Bloquear</button>
+    </div>
+    <div class="stats-grid cols4" style="margin-bottom:20px">
+      <div class="stat-card ${totalPnl>=0?'green':'red'}"><div class="s-label">P&L total (personal)</div><div class="s-val">${totalPnl>=0?'+':''}${fmtUSD(totalPnl)}</div><div class="s-sub">No incluido en el global de la empresa</div></div>
+    </div>
+    <div class="two-cols">${cards}</div>`;
 }
 
 // ══════════════════════════════════════
