@@ -854,8 +854,10 @@ async function loadCuentas() {
 function accountTableHTML(accs, opts={}) {
   const rows = accs.map(a=>{
     const pnl=Number(a.current_pnl||0), tgt=Number(a.profit_target||0), mll=Number(a.max_loss_limit||0);
+    const fundedBlock = `<div style="font-size:12px"><span style="color:var(--green)">✅ Fondeada</span> · P&L: <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>
+      ${typeof a.mll_distancia==='number' ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">⚠️ Riesgo máximo disponible hoy: <strong>${fmtUSD(a.mll_distancia)}</strong> (antes de tocar MLL)</div>` : ''}`;
     const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consistencyInline(a)
-               : a.phase==='funded'     ? '<span style="color:var(--green)">✅ Fondeada</span>'
+               : a.phase==='funded'     ? fundedBlock
                :                          '<span style="color:var(--red)">🔥 Quemada</span>';
     const costoCell = a.cost_mxn
       ? `<div class="dual-amount"><div class="main">${fmtUSD(a.cost_initial)}</div><div class="sub">${fmtMXN(a.cost_mxn)} · TC ${a.exchange_rate_purchase||'—'}</div></div>`
