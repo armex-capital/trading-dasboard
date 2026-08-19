@@ -971,7 +971,7 @@ async function accountTableHTML(accs, opts={}) {
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick='openAccountDetail(${JSON.stringify(a)})' title="Detalle">🔍</button>
         <button class="btn btn-ghost btn-sm" onclick='editCuenta(${JSON.stringify(a)})'>✏️</button>
-        <button class="btn btn-ghost btn-sm" onclick="openModalEvento('${a.id}')">📝</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModalEvento('${a.id}', ${!!a.is_personal})">📝</button>
         ${a.phase==='evaluation'?`<button class="btn btn-ghost btn-sm" onclick="openModalUpdatePnl('${a.id}','${a.firm}',${a.current_pnl||0})">📊</button>`:''}
       </td>
     </tr>`;
@@ -1223,9 +1223,9 @@ async function loadMovimientos() {
   el.innerHTML = movimientosTableHTML(evts);
 }
 
-async function openModalEvento(preAccountId='') {
+async function openModalEvento(preAccountId='', isPersonal=false) {
   const [{ data: accs }, { data: traders }] = await Promise.all([
-    sb.from('trading_accounts').select('id,firm,account_size,account_number,phase,trader_id,payment_processor,payment_detail').order('firm'),
+    sb.from('trading_accounts').select('id,firm,account_size,account_number,phase,trader_id,payment_processor,payment_detail').eq('is_personal', isPersonal).order('firm'),
     sb.from('trading_traders').select('id,name,nickname').order('name'),
   ]);
   const allAccs = accs||[], allTrs = traders||[];
@@ -1251,7 +1251,7 @@ async function openModalEvento(preAccountId='') {
     }).join('');
   }
 
-  setModal('Registrar movimiento', `
+  setModal(isPersonal ? 'Registrar movimiento (Javi)' : 'Registrar movimiento (Armex)', `
     <div class="field-row">
       <div class="field"><label>Trader</label>
         <select id="ev-trader" onchange="filterEvAccounts()">
@@ -1823,7 +1823,7 @@ async function renderConfigMovimientos(el) {
     .in('account_id', ids).order('event_date',{ascending:false});
   el.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-      <button class="btn btn-blue btn-sm" onclick="openModalEvento()">+ Movimiento</button>
+      <button class="btn btn-blue btn-sm" onclick="openModalEvento('', true)">+ Movimiento</button>
     </div>
     ${movimientosTableHTML(evts||[])}`;
 }
