@@ -686,8 +686,8 @@ async function loadDashboard() {
   const [{ data: accounts }, { data: events }, { data: income }, { data: expenses }] = await Promise.all([
     sb.from('trading_accounts').select('*').eq('is_personal', false),
     sb.from('trading_events').select('*'),
-    sb.from('trading_income').select('*'),
-    sb.from('trading_expenses').select('*'),
+    sb.from('trading_income').select('*').eq('is_personal', false),
+    sb.from('trading_expenses').select('*').eq('is_personal', false),
   ]);
   const accs = accounts||[];
   const accIds = new Set(accs.map(a=>a.id));
@@ -1355,13 +1355,10 @@ function refreshMovimientosView() {
 // ══════════════════════════════════════
 // CAPITAL — INGRESOS
 // ══════════════════════════════════════
-async function loadIngresos() {
-  const el = document.getElementById('ingresos-content');
-  const { data } = await sb.from('trading_income').select('*').order('income_date',{ascending:false});
-  const items = data||[];
+function ingresosTableHTML(items) {
+  if (!items.length) return '<div class="empty-state"><div class="e-icon">💵</div>Sin ingresos.</div>';
   const totalMXN = items.filter(i=>i.currency==='MXN'||!i.currency).reduce((s,i)=>s+Number(i.amount),0);
   const totalUSD = items.filter(i=>i.currency==='USD').reduce((s,i)=>s+Number(i.amount),0);
-  if (!items.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">💵</div>Sin ingresos.</div>'; return; }
   const rows = items.map(i=>{
     const cur=i.currency||'MXN';
     const mainAmt = cur==='MXN' ? fmtMXN(i.amount) : fmtUSD(i.amount);
@@ -1376,7 +1373,7 @@ async function loadIngresos() {
       <td style="white-space:nowrap">${i.receipt_url?`<a href="${i.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" title="Ver comprobante">📎</a>`:''}${delBtn(`deleteIngreso('${i.id}')`)}</td>
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class="table-card">
+  return `<div class="table-card">
     <div class="table-card-header">
       <h3>Total</h3>
       <div>${totalMXN?`<span style="color:var(--green);font-weight:700">${fmtMXN(totalMXN)}</span> `:''} ${totalUSD?`<span style="color:var(--blue);font-weight:700">${fmtUSD(totalUSD)}</span>`:''}</div>
@@ -1384,9 +1381,13 @@ async function loadIngresos() {
     <table><thead><tr><th>Fecha</th><th>Tipo</th><th>De quién</th><th>Moneda</th><th>Monto</th><th>Descripción</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
-
-function openModalIngreso() {
-  setModal('Registrar ingreso de capital', `
+async function loadIngresos() {
+  const el = document.getElementById('ingresos-content');
+  const { data } = await sb.from('trading_income').select('*').eq('is_personal', false).order('income_date',{ascending:false});
+  el.innerHTML = ingresosTableHTML(data||[]);
+}
+function openModalIngreso(isPersonal=false) {
+  setModal(isPersonal ? 'Registrar ingreso personal (Javi)' : 'Registrar ingreso de capital (Armex)', `
     <div class="field-row">
       <div class="field"><label>Tipo de ingreso *</label><select id="in-type">
         <option value="empresa">🏢 Empresa</option>
@@ -1403,35 +1404,36 @@ function openModalIngreso() {
     <div class="field"><label>Descripción</label><textarea id="in-desc" placeholder="De dónde viene..."></textarea></div>
     ${fileUploadHTML('in')}
     <div id="form-err"></div>`,
-  [{ label:'Registrar', cls:'btn-blue', fn:'saveIngreso()' }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+  [{ label:'Registrar', cls:'btn-blue', fn:`saveIngreso(${isPersonal})` }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
 }
-async function saveIngreso() {
+async function saveIngreso(isPersonal=false) {
   const source_type=data_v('in-type'), amount=num('in-amount'), income_date=data_v('in-date');
   const contributor_name=data_v('in-name'), description=data_v('in-desc');
   const currency=getCur('in'), rate=num('in-rate');
   const amount_usd = toUSD(amount, currency, rate||17.5);
   if (!amount||!income_date) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Monto y fecha son requeridos</div>'; return; }
   const receipt_url = await uploadReceipt('in', 'ingresos');
-  const { error } = await sb.from('trading_income').insert({ source_type, amount, income_date, contributor_name:contributor_name||null, description:description||null, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url });
+  const { error } = await sb.from('trading_income').insert({ source_type, amount, income_date, contributor_name:contributor_name||null, description:description||null, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url, is_personal: isPersonal });
   if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
-  closeModal(); loadIngresos();
+  closeModal(); refreshCapitalView();
 }
 async function deleteIngreso(id) {
   if (!canDelete()) return;
   if (!confirm('¿Eliminar este ingreso?')) return;
-  await sb.from('trading_income').delete().eq('id',id); loadIngresos();
+  await sb.from('trading_income').delete().eq('id',id); refreshCapitalView();
+}
+function refreshCapitalView() {
+  if (document.getElementById('page-config')?.classList.contains('active')) renderConfigCapital(document.getElementById('config-inner'));
+  else { loadIngresos(); loadGastos(); }
 }
 
 // ══════════════════════════════════════
 // CAPITAL — GASTOS
 // ══════════════════════════════════════
-async function loadGastos() {
-  const el = document.getElementById('gastos-content');
-  const { data } = await sb.from('trading_expenses').select('*').order('expense_date',{ascending:false});
-  const items = data||[];
+function gastosTableHTML(items) {
+  if (!items.length) return '<div class="empty-state"><div class="e-icon">🧾</div>Sin gastos.</div>';
   const totalMXN = items.filter(i=>i.currency==='MXN'||!i.currency).reduce((s,i)=>s+Number(i.amount),0);
   const totalUSD = items.filter(i=>i.currency==='USD').reduce((s,i)=>s+Number(i.amount),0);
-  if (!items.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🧾</div>Sin gastos.</div>'; return; }
   const rows = items.map(i=>{
     const cur=i.currency||'MXN';
     const mainAmt = cur==='MXN' ? fmtMXN(i.amount) : fmtUSD(i.amount);
@@ -1448,7 +1450,7 @@ async function loadGastos() {
       <td style="white-space:nowrap">${receiptBtn}${delBtn(`deleteGasto('${i.id}')`)}</td>
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class="table-card">
+  return `<div class="table-card">
     <div class="table-card-header">
       <h3>Total</h3>
       <div>${totalMXN?`<span style="color:var(--red);font-weight:700">-${fmtMXN(totalMXN)}</span> `:''} ${totalUSD?`<span style="color:var(--red);font-weight:700">-${fmtUSD(totalUSD)}</span>`:''}</div>
@@ -1456,9 +1458,13 @@ async function loadGastos() {
     <table><thead><tr><th>Fecha</th><th>Categoría</th><th>Moneda</th><th>Monto</th><th>Descripción</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
-
-function openModalGasto() {
-  setModal('Registrar gasto general', `
+async function loadGastos() {
+  const el = document.getElementById('gastos-content');
+  const { data } = await sb.from('trading_expenses').select('*').eq('is_personal', false).order('expense_date',{ascending:false});
+  el.innerHTML = gastosTableHTML(data||[]);
+}
+function openModalGasto(isPersonal=false) {
+  setModal(isPersonal ? 'Registrar gasto personal (Javi)' : 'Registrar gasto general (Armex)', `
     <div class="field"><label>Categoría *</label><select id="ga-cat">
       <option value="tablet">📱 Tablet</option>
       <option value="computadora">💻 Computadora</option>
@@ -1476,22 +1482,22 @@ function openModalGasto() {
     ${curToggleHTML('ga','MXN')}
     ${fileUploadHTML('ga')}
     <div id="form-err"></div>`,
-  [{ label:'Registrar', cls:'btn-blue', fn:'saveGasto()' }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
+  [{ label:'Registrar', cls:'btn-blue', fn:`saveGasto(${isPersonal})` }, { label:'Cancelar', cls:'btn-ghost', fn:'closeModal()' }]);
 }
-async function saveGasto() {
+async function saveGasto(isPersonal=false) {
   const category=data_v('ga-cat'), amount=num('ga-amount'), description=data_v('ga-desc'), expense_date=data_v('ga-date');
   const currency=getCur('ga'), rate=num('ga-rate');
   const amount_usd = toUSD(amount, currency, rate||17.5);
   if (!amount||!description||!expense_date) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Todos los campos son requeridos</div>'; return; }
   const receipt_url = await uploadReceipt('ga', 'gastos');
-  const { error } = await sb.from('trading_expenses').insert({ category, amount, description, expense_date, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url });
+  const { error } = await sb.from('trading_expenses').insert({ category, amount, description, expense_date, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url, is_personal: isPersonal });
   if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
-  closeModal(); loadGastos();
+  closeModal(); refreshCapitalView();
 }
 async function deleteGasto(id) {
   if (!canDelete()) return;
   if (!confirm('¿Eliminar este gasto?')) return;
-  await sb.from('trading_expenses').delete().eq('id',id); loadGastos();
+  await sb.from('trading_expenses').delete().eq('id',id); refreshCapitalView();
 }
 
 // ══════════════════════════════════════
@@ -1773,6 +1779,7 @@ function renderConfigShell(el) {
         <button class="btn ${_configView==='dashboard'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('dashboard')">📊 Dashboard</button>
         <button class="btn ${_configView==='cuentas'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('cuentas')">🏦 Cuentas</button>
         <button class="btn ${_configView==='movimientos'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('movimientos')">📝 Movimientos</button>
+        <button class="btn ${_configView==='capital'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('capital')">💰 Capital</button>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="_configUnlocked=false;loadConfig()">Bloquear</button>
     </div>
@@ -1780,7 +1787,32 @@ function renderConfigShell(el) {
   const inner = document.getElementById('config-inner');
   if (_configView === 'dashboard') renderConfigDashboard(inner);
   else if (_configView === 'movimientos') renderConfigMovimientos(inner);
+  else if (_configView === 'capital') renderConfigCapital(inner);
   else renderConfigPersonal(inner);
+}
+
+async function renderConfigCapital(el) {
+  const [{ data: income }, { data: expenses }] = await Promise.all([
+    sb.from('trading_income').select('*').eq('is_personal', true).order('income_date',{ascending:false}),
+    sb.from('trading_expenses').select('*').eq('is_personal', true).order('expense_date',{ascending:false}),
+  ]);
+  el.innerHTML = `
+    <div class="two-cols">
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <h3 style="font-size:15px;">💵 Ingresos personales</h3>
+          <button class="btn btn-green btn-sm" onclick="openModalIngreso(true)">+ Ingreso</button>
+        </div>
+        ${ingresosTableHTML(income||[])}
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <h3 style="font-size:15px;">🧾 Gastos personales</h3>
+          <button class="btn btn-red btn-sm" onclick="openModalGasto(true)">+ Gasto</button>
+        </div>
+        ${gastosTableHTML(expenses||[])}
+      </div>
+    </div>`;
 }
 
 async function renderConfigMovimientos(el) {
