@@ -872,25 +872,25 @@ function accountTableHTML(accs, opts={}) {
   const rows = accs.map(a=>{
     const pnl=Number(a.current_pnl||0), tgt=Number(a.profit_target||0), mll=Number(a.max_loss_limit||0);
     const colchon = typeof a.mll_distancia==='number' ? Number(a.mll_distancia) : null;
-    const cobroTarget = 2000; // colchón necesario para poder retirar ~$1,000 (50%)
-    const faltaCobro = colchon!==null ? Math.max(0, cobroTarget-colchon) : null;
-    const retirableAhora = colchon!==null ? Math.max(0, colchon*0.5) : null;
-    const cobroPct = colchon!==null ? Math.min(100, Math.max(0, (colchon/cobroTarget)*100)) : 0;
-    const cobroBarColor = colchon===null ? 'var(--blue)' : colchon<0 ? 'var(--red)' : cobroPct>=100 ? 'var(--green)' : 'var(--blue)';
-    const cobroBar = colchon!==null ? `<div class="progress-wrap">
+    const cobroTarget = 2000; // GANANCIA (no colchón) necesaria para poder retirar ~$1,000 (50%)
+    const faltaCobro = Math.max(0, cobroTarget-pnl);
+    const retirableAhora = Math.max(0, pnl*0.5);
+    const cobroPct = Math.min(100, Math.max(0, (pnl/cobroTarget)*100));
+    const cobroBarColor = pnl<0 ? 'var(--red)' : cobroPct>=100 ? 'var(--green)' : 'var(--blue)';
+    const cobroBar = `<div class="progress-wrap">
         <div class="progress-bar"><div class="progress-fill" style="width:${cobroPct}%;background:${cobroBarColor}"></div></div>
-        <span class="progress-label">${fmtN(colchon)}/${fmtN(cobroTarget)}</span>
-      </div>` : '';
+        <span class="progress-label">${fmtN(pnl)}/${fmtN(cobroTarget)}</span>
+      </div>`;
     const isLucidFunded = a.firm==='Lucid' && a.phase==='funded';
     const fundedHeader = `<div style="font-size:12px"><span style="color:var(--green)">✅ Fondeada</span> · P&L: <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>`;
     const fundedBlock = isLucidFunded
       ? `${fundedHeader}
-        ${cobroBar ? `<div style="font-size:10px;color:var(--muted);margin-top:5px">Meta: colchón $2,000 → retiro $1,000</div>${cobroBar}` : ''}
+        <div style="font-size:10px;color:var(--muted);margin-top:5px">Meta: ganancia $2,000 → retiro $1,000 (50%)</div>${cobroBar}
         ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
-        ${faltaCobro!==null ? (faltaCobro>0
-          ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,140,220,.12);color:var(--blue)">💰 Faltan <strong>${fmtUSD(faltaCobro)}</strong> de colchón para poder retirar ~$1,000 (50%)</div>`
-          : `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,180,100,.14);color:var(--green)">💰 Ya puedes retirar ~${fmtUSD(retirableAhora)} (50% del colchón)</div>`
-        ) : ''}`
+        ${faltaCobro>0
+          ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,140,220,.12);color:var(--blue)">💰 Faltan <strong>${fmtUSD(faltaCobro)}</strong> de ganancia para poder retirar ~$1,000 (50%)</div>`
+          : `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,180,100,.14);color:var(--green)">💰 Ya puedes retirar ~${fmtUSD(retirableAhora)} (50% de la ganancia)</div>`
+        }`
       : `${fundedHeader}
         ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
         ${mllFreezeBlock(a)}`;
