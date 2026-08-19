@@ -210,6 +210,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
 .pw-k{display:block;font-size:8px;text-transform:uppercase;letter-spacing:.5px;color:#666;}
 .pw-v{display:block;font-size:12.5px;font-weight:700;color:#111;}
 .pw-notes-label{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;margin-bottom:3px;}
+.pw-cons-warn{font-size:11px;border:1px dashed #333;border-radius:4px;padding:4px 8px;margin-bottom:6px;color:#111;}
 .pw-lines{height:0.85in;background-image:repeating-linear-gradient(to bottom,transparent,transparent 18px,#ccc 19px);border:1px dashed #bbb;border-radius:4px;}
 @media print{
   body > *:not(#print-worksheet){display:none !important;}
@@ -1008,6 +1009,9 @@ function printWorksheet(accsOverride, labelOverride) {
         ${typeof a.consistencia==='number' ? `<div><span class="pw-k">Consistencia</span><span class="pw-v">${a.consistencia.toFixed(1)}%</span></div>` : ''}
         ${info ? `<div><span class="pw-k">${info.frozen?'MLL':'Falta congelar MLL'}</span><span class="pw-v">${info.frozen?'Congelado':fmtUSD(info.falta)}</span></div>` : ''}
       </div>
+      ${(() => { const p = consistencyPlan(a); return p && p.bad
+        ? `<div class="pw-cons-warn">⚠️ Consistencia ${p.consistencia.toFixed(1)}% — necesita <strong>2 días de ${fmtUSD(p.op2)}</strong> o <strong>3 días de ${fmtUSD(p.op3)}</strong> (no todo en un solo día)</div>`
+        : ''; })()}
       <div class="pw-notes-label">Plan del día — entrada / SL / TP / contratos / notas</div>
       <div class="pw-lines"></div>
     </div>`;
