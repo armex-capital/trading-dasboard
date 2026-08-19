@@ -1190,18 +1190,24 @@ function movimientosTableHTML(evts) {
     const receiptBtn = e.receipt_url
       ? `<a href="${e.receipt_url}" target="_blank" class="btn btn-ghost btn-sm" title="Ver comprobante">📎</a>`
       : '';
+    const procCell = e.event_type==='payout'
+      ? (e.payment_processor
+          ? `<div>${payProcLabel(e.payment_processor)}</div><div style="font-size:10px;color:var(--muted);font-family:monospace">${e.payment_detail||''}</div>`
+          : '<span style="color:var(--faint)">—</span>')
+      : '<span style="color:var(--faint)">—</span>';
     return `<tr>
       <td>${fmtDate(e.event_date)}</td>
       <td>${eventLabel(e.event_type)}</td>
       <td>${acc?`${acc.firm} ${fmtN(acc.account_size)}<span style="color:var(--muted);font-size:11px"> #${acc.account_number||'—'}</span>`:'—'}</td>
       <td>${curBadge(cur)}</td>
       <td><div style="color:${col};font-weight:700">${amtMain}</div>${amtSub?`<div style="font-size:10px;color:var(--muted)">${amtSub}</div>`:''}</td>
+      <td style="font-size:12px">${procCell}</td>
       <td style="color:var(--muted);font-size:12px">${e.notes||'—'}</td>
       <td style="white-space:nowrap">${receiptBtn}${delBtn(`deleteEvento('${e.id}')`)}</td>
     </tr>`;
   }).join('');
   return `<div class="table-card"><table>
-    <thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Moneda</th><th>Monto</th><th>Notas</th><th></th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Moneda</th><th>Monto</th><th>Procesador</th><th>Notas</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1219,7 +1225,7 @@ async function loadMovimientos() {
 
 async function openModalEvento(preAccountId='') {
   const [{ data: accs }, { data: traders }] = await Promise.all([
-    sb.from('trading_accounts').select('id,firm,account_size,account_number,phase,trader_id').order('firm'),
+    sb.from('trading_accounts').select('id,firm,account_size,account_number,phase,trader_id,payment_processor,payment_detail').order('firm'),
     sb.from('trading_traders').select('id,name,nickname').order('name'),
   ]);
   const allAccs = accs||[], allTrs = traders||[];
@@ -1253,7 +1259,7 @@ async function openModalEvento(preAccountId='') {
         </select>
       </div>
       <div class="field"><label>Cuenta *</label>
-        <select id="ev-acc">${accOpts(preTrader)}</select>
+        <select id="ev-acc" onchange="onEvAccountChange()">${accOpts(preTrader)}</select>
       </div>
     </div>
     <div class="field-row">
@@ -1268,6 +1274,22 @@ async function openModalEvento(preAccountId='') {
     </div>
     ${curToggleHTML('ev','USD')}
     <div class="field"><label>Fecha *</label><input id="ev-date" type="date" value="${new Date().toISOString().split('T')[0]}" onclick="this.showPicker()"></div>
+    <div id="ev-payout-wrap" style="display:none">
+      <div class="field-row">
+        <div class="field"><label>Procesador de pago</label>
+          <select id="ev-payproc">
+            <option value="">Sin definir</option>
+            <option value="wise">💳 Wise</option>
+            <option value="crypto">🪙 Crypto</option>
+            <option value="plane">✈️ Plane</option>
+            <option value="banco">🏦 Transferencia bancaria</option>
+            <option value="otro">📌 Otro</option>
+          </select>
+        </div>
+        <div class="field"><label>Detalle (correo/wallet/cuenta)</label><input id="ev-paydetail" placeholder="—"></div>
+      </div>
+      <div style="font-size:10px;color:var(--faint);margin:-10px 0 12px">Se llena solo con lo que tiene configurado la cuenta — cámbialo aquí si este retiro fue a otro lado.</div>
+    </div>
     <div class="field"><label>Notas</label><textarea id="ev-notes" placeholder="Descripción..."></textarea></div>
     ${fileUploadHTML('ev')}
     <div id="form-err"></div>`,
@@ -1275,6 +1297,8 @@ async function openModalEvento(preAccountId='') {
 
   // Guardamos las cuentas en closure para filtrar sin nueva consulta
   window._evAllAccs = allAccs;
+  onEvTypeChange();
+  onEvAccountChange();
 }
 
 function filterEvAccounts() {
@@ -1294,6 +1318,15 @@ function onEvTypeChange() {
   const t = document.getElementById('ev-type')?.value;
   const isFeeMXN = ['monthly_fee','activation_fee'].includes(t);
   if (isFeeMXN) setCur('ev','MXN'); else setCur('ev','USD');
+  const wrap = document.getElementById('ev-payout-wrap');
+  if (wrap) wrap.style.display = t==='payout' ? '' : 'none';
+}
+function onEvAccountChange() {
+  const accId = document.getElementById('ev-acc')?.value;
+  const acc = (window._evAllAccs||[]).find(a=>a.id===accId);
+  const procSel = document.getElementById('ev-payproc'), detInp = document.getElementById('ev-paydetail');
+  if (procSel) procSel.value = acc?.payment_processor || '';
+  if (detInp)  detInp.value  = acc?.payment_detail || '';
 }
 async function saveEvento() {
   const account_id = data_v('ev-acc'), event_type = data_v('ev-type');
@@ -1302,7 +1335,9 @@ async function saveEvento() {
   const amount_usd = toUSD(amount, currency, rate||17.5);
   if (!account_id||!amount||!event_date) { document.getElementById('form-err').innerHTML='<div class="alert alert-red">Completa cuenta, monto y fecha</div>'; return; }
   const receipt_url = await uploadReceipt('ev', 'movimientos');
-  const { error } = await sb.from('trading_events').insert({ account_id, event_type, amount, event_date, notes:notes||null, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url });
+  const payment_processor = event_type==='payout' ? (data_v('ev-payproc')||null) : null;
+  const payment_detail = event_type==='payout' ? (data_v('ev-paydetail')||null) : null;
+  const { error } = await sb.from('trading_events').insert({ account_id, event_type, amount, event_date, notes:notes||null, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url, payment_processor, payment_detail });
   if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
   if (event_type==='burn') await sb.from('trading_accounts').update({ phase:'burned', burned_date:event_date }).eq('id',account_id);
   closeModal(); refreshMovimientosView();
