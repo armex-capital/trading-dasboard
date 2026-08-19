@@ -196,6 +196,25 @@ tr:hover td{background:rgba(255,255,255,.02);}
 .btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--muted);padding:7px 14px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;}
 .btn-outline:hover{border-color:var(--blue);color:var(--blue);}
 .badge-green{background:#0e2a1a;color:var(--green);border:1px solid #1a3a1a;}
+
+/* Hoja de trabajo imprimible */
+#print-worksheet{display:none;}
+.pw-header{font-family:Georgia,serif;font-size:18px;font-weight:700;margin-bottom:14px;color:#111;}
+.pw-card{border:2px solid #333;border-radius:6px;padding:14px 16px;margin-bottom:22px;page-break-inside:avoid;color:#111;background:#fff;}
+.pw-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #999;padding-bottom:6px;margin-bottom:8px;}
+.pw-head strong{font-size:15px;}
+.pw-phase{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#555;margin-left:8px;}
+.pw-trader{font-size:12px;color:#555;}
+.pw-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 14px;margin-bottom:10px;}
+.pw-k{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;}
+.pw-v{display:block;font-size:14px;font-weight:700;color:#111;}
+.pw-notes-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#666;margin-bottom:4px;}
+.pw-lines{height:1.6in;background-image:repeating-linear-gradient(to bottom,transparent,transparent 23px,#ccc 24px);border:1px dashed #bbb;border-radius:4px;}
+@media print{
+  body > *:not(#print-worksheet){display:none !important;}
+  #print-worksheet{display:block !important;}
+  @page{size:letter;margin:0.5in;}
+}
 </style>
 </head>
 <body>
@@ -245,7 +264,10 @@ tr:hover td{background:rgba(255,255,255,.02);}
     <div id="page-cuentas" class="page">
       <div class="page-header">
         <div><h1>Cuentas de Fondeo</h1><p>Gestión de todas las prop firm accounts</p></div>
-        <button class="btn btn-blue" onclick="openModalCuenta()">+ Nueva cuenta</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="printWorksheet()">🖨️ Hoja de trabajo (PDF)</button>
+          <button class="btn btn-blue" onclick="openModalCuenta()">+ Nueva cuenta</button>
+        </div>
       </div>
       <div class="filter-bar">
         <select id="f-firma" onchange="loadCuentas()"><option value="">Todas las firmas</option>
@@ -343,6 +365,8 @@ tr:hover td{background:rgba(255,255,255,.02);}
     </div>
   </div>
 </div>
+
+<div id="print-worksheet"></div>
 
 <!-- MODAL -->
 <div id="modal-overlay" onclick="closeModalIfOutside(event)">
@@ -864,9 +888,11 @@ async function loadCuentas() {
   if (tipo)  q=q.eq('account_type',tipo); if (trader) q=q.eq('trader_id',trader);
   const { data } = await q;
   const accs = (data||[]).sort(accountSort);
+  _lastCuentasAccs = accs;
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🏦</div>Sin cuentas. Agrega la primera.</div>'; return; }
   el.innerHTML = await accountTableHTML(accs, { showTrader:true, showCost:true, traderNameFn:a=>a.trading_traders?.name });
 }
+let _lastCuentasAccs = [];
 
 async function accountTableHTML(accs, opts={}) {
   // Regla Lucid: 5 días separados con mínimo $150 de ganancia cada uno para calificar a payout.
@@ -951,6 +977,43 @@ async function accountTableHTML(accs, opts={}) {
   return `<div class="table-card"><table>
     <thead><tr><th>Cuenta</th><th>Fase</th><th>Tipo</th><th>Monto</th>${opts.showTrader?'<th>Trader</th>':''}<th>Progreso / Consistencia</th>${opts.showCost?'<th>Costo</th><th>Cobro</th>':''}<th>Acciones</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
+}
+
+function printWorksheet() {
+  const accs = _lastCuentasAccs;
+  const container = document.getElementById('print-worksheet');
+  if (!accs.length) { alert('No hay cuentas cargadas para imprimir.'); return; }
+  const traderSel = document.getElementById('f-trader');
+  const traderLabel = traderSel && traderSel.value ? traderSel.options[traderSel.selectedIndex].text : 'Todos los traders';
+  const cards = accs.map(a => {
+    const pnl = Number(a.current_pnl||0);
+    const tgt = Number(a.profit_target||0);
+    const falta = tgt ? Math.max(0, tgt-pnl) : null;
+    const colchon = typeof a.mll_distancia==='number' ? Number(a.mll_distancia) : null;
+    const fase = a.phase==='funded' ? 'FONDEADA' : a.phase==='evaluation' ? 'EVALUACIÓN' : 'QUEMADA';
+    const info = mllFreezeInfo(a);
+    return `
+    <div class="pw-card">
+      <div class="pw-head">
+        <div><strong>${a.firm} #${a.account_number||'—'}</strong><span class="pw-phase">${fase}</span></div>
+        <div class="pw-trader">${a.trading_traders?.name || ''}</div>
+      </div>
+      <div class="pw-grid">
+        <div><span class="pw-k">Balance / P&L</span><span class="pw-v">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>
+        <div><span class="pw-k">Monto cuenta</span><span class="pw-v">${fmtUSD(a.account_size)}</span></div>
+        ${tgt ? `<div><span class="pw-k">Falta para TP $${fmtN(tgt)}</span><span class="pw-v">${fmtUSD(falta)}</span></div>` : ''}
+        ${colchon!==null ? `<div><span class="pw-k">Colchón MLL</span><span class="pw-v">${fmtUSD(colchon)}</span></div>` : ''}
+        ${typeof a.consistencia==='number' ? `<div><span class="pw-k">Consistencia</span><span class="pw-v">${a.consistencia.toFixed(1)}%</span></div>` : ''}
+        ${info ? `<div><span class="pw-k">${info.frozen?'MLL':'Falta congelar MLL'}</span><span class="pw-v">${info.frozen?'Congelado':fmtUSD(info.falta)}</span></div>` : ''}
+      </div>
+      <div class="pw-notes-label">Plan del día — entrada / SL / TP / contratos / notas</div>
+      <div class="pw-lines"></div>
+    </div>`;
+  }).join('');
+  container.innerHTML = `
+    <div class="pw-header">Hoja de trabajo — ${traderLabel}<br><span style="font-size:12px;font-weight:400;color:#555">${new Date().toLocaleDateString('es-MX',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}</span></div>
+    ${cards}`;
+  window.print();
 }
 
 async function loadTraderFilter() {
