@@ -854,8 +854,16 @@ async function loadCuentas() {
 function accountTableHTML(accs, opts={}) {
   const rows = accs.map(a=>{
     const pnl=Number(a.current_pnl||0), tgt=Number(a.profit_target||0), mll=Number(a.max_loss_limit||0);
+    const colchon = typeof a.mll_distancia==='number' ? Number(a.mll_distancia) : null;
+    const cobroTarget = 2000; // colchón necesario para poder retirar ~$1,000 (50%)
+    const faltaCobro = colchon!==null ? Math.max(0, cobroTarget-colchon) : null;
+    const retirableAhora = colchon!==null ? Math.max(0, colchon*0.5) : null;
     const fundedBlock = `<div style="font-size:12px"><span style="color:var(--green)">✅ Fondeada</span> · P&L: <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>
-      ${typeof a.mll_distancia==='number' ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">⚠️ Riesgo máximo disponible hoy: <strong>${fmtUSD(a.mll_distancia)}</strong> (antes de tocar MLL)</div>` : ''}`;
+      ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
+      ${faltaCobro!==null ? (faltaCobro>0
+        ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,140,220,.12);color:var(--blue)">💰 Faltan <strong>${fmtUSD(faltaCobro)}</strong> de colchón para poder retirar ~$1,000 (50%)</div>`
+        : `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,180,100,.14);color:var(--green)">💰 Ya puedes retirar ~${fmtUSD(retirableAhora)} (50% del colchón)</div>`
+      ) : ''}`;
     const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consistencyInline(a)
                : a.phase==='funded'     ? fundedBlock
                :                          '<span style="color:var(--red)">🔥 Quemada</span>';
