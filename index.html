@@ -865,10 +865,21 @@ async function loadCuentas() {
   const { data } = await q;
   const accs = (data||[]).sort(accountSort);
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🏦</div>Sin cuentas. Agrega la primera.</div>'; return; }
-  el.innerHTML = accountTableHTML(accs, { showTrader:true, showCost:true, traderNameFn:a=>a.trading_traders?.name });
+  el.innerHTML = await accountTableHTML(accs, { showTrader:true, showCost:true, traderNameFn:a=>a.trading_traders?.name });
 }
 
-function accountTableHTML(accs, opts={}) {
+async function accountTableHTML(accs, opts={}) {
+  // Regla Lucid: 5 días separados con mínimo $150 de ganancia cada uno para calificar a payout.
+  const fundedIds = accs.filter(a=>a.firm==='Lucid' && a.phase==='funded').map(a=>a.id);
+  const payoutDaysMap = {};
+  if (fundedIds.length) {
+    const { data: evts } = await sb.from('trading_events').select('account_id,amount,event_date')
+      .eq('event_type','daily_result').in('account_id', fundedIds).gte('amount', 150);
+    (evts||[]).forEach(e=>{
+      if (!payoutDaysMap[e.account_id]) payoutDaysMap[e.account_id] = new Set();
+      payoutDaysMap[e.account_id].add(e.event_date);
+    });
+  }
   const rows = accs.map(a=>{
     const pnl=Number(a.current_pnl||0), tgt=Number(a.profit_target||0), mll=Number(a.max_loss_limit||0);
     const colchon = typeof a.mll_distancia==='number' ? Number(a.mll_distancia) : null;
@@ -882,6 +893,19 @@ function accountTableHTML(accs, opts={}) {
         <span class="progress-label">${fmtN(pnl)}/${fmtN(cobroTarget)}</span>
       </div>`;
     const isLucidFunded = a.firm==='Lucid' && a.phase==='funded';
+    const payoutDaysCount = payoutDaysMap[a.id] ? payoutDaysMap[a.id].size : 0;
+    const payoutDaysTarget = 5;
+    const payoutDaysPct = Math.min(100, (payoutDaysCount/payoutDaysTarget)*100);
+    const payoutDaysBlock = isLucidFunded ? `
+        <div style="font-size:10px;color:var(--muted);margin-top:8px">Días de payout ($150+ netos, separados) — meta 5</div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" style="width:${payoutDaysPct}%;background:${payoutDaysCount>=payoutDaysTarget?'var(--green)':'var(--purple)'}"></div></div>
+          <span class="progress-label">${payoutDaysCount}/${payoutDaysTarget}</span>
+        </div>
+        ${payoutDaysCount>=payoutDaysTarget
+          ? `<div style="font-size:11px;margin-top:3px;color:var(--green)">✅ Días mínimos completos</div>`
+          : `<div style="font-size:11px;margin-top:3px;color:var(--purple)">Faltan <strong>${payoutDaysTarget-payoutDaysCount}</strong> día(s) de $150+</div>`
+        }` : '';
     const fundedHeader = `<div style="font-size:12px"><span style="color:var(--green)">✅ Fondeada</span> · P&L: <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>`;
     const fundedBlock = isLucidFunded
       ? `${fundedHeader}
@@ -890,7 +914,8 @@ function accountTableHTML(accs, opts={}) {
         ${faltaCobro>0
           ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,140,220,.12);color:var(--blue)">💰 Faltan <strong>${fmtUSD(faltaCobro)}</strong> de ganancia para poder retirar ~$1,000 (50%)</div>`
           : `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,180,100,.14);color:var(--green)">💰 Ya puedes retirar ~${fmtUSD(retirableAhora)} (50% de la ganancia)</div>`
-        }`
+        }
+        ${payoutDaysBlock}`
       : `${fundedHeader}
         ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
         ${mllFreezeBlock(a)}`;
@@ -1670,7 +1695,7 @@ async function renderConfigPersonal(el) {
   const { data: accounts } = await sb.from('trading_accounts').select('*').eq('is_personal', true).order('firm');
   const accs = (accounts||[]).sort(accountSort);
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🔒</div>Sin cuentas personales registradas.</div>'; return; }
-  el.innerHTML = accountTableHTML(accs, { showTrader:false, showCost:true });
+  el.innerHTML = await accountTableHTML(accs, { showTrader:false, showCost:true });
 }
 
 async function renderConfigDashboard(el) {
