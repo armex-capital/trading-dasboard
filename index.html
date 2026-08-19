@@ -1034,9 +1034,9 @@ async function loadCuentasFilter() {
   if (sel) sel.innerHTML='<option value="">Todas las cuentas</option>'+(data||[]).map(a=>`<option value="${a.id}">${a.firm} ${fmtN(a.account_size)} #${a.account_number||'—'}</option>`).join('');
 }
 
-const payDetailLabel = p => ({wise:'📧 Correo de Wise',crypto:'🪙 Dirección de wallet (incluye red)',banco:'🏦 Datos bancarios destino',otro:'📌 Detalle del método'})[p]||'Detalle';
-const payDetailPlaceholder = p => ({wise:'nombre@wise.com',crypto:'0x... (Red: ERC-20)',banco:'CLABE o SWIFT + banco',otro:'Descripción'})[p]||'';
-const payProcLabel = p => ({wise:'💳 Wise',crypto:'🪙 Crypto',banco:'🏦 Banco',otro:'📌 Otro'})[p]||'—';
+const payDetailLabel = p => ({wise:'📧 Correo de Wise',crypto:'🪙 Dirección de wallet (incluye red)',plane:'✈️ Correo/ID de Plane',banco:'🏦 Datos bancarios destino',otro:'📌 Detalle del método'})[p]||'Detalle';
+const payDetailPlaceholder = p => ({wise:'nombre@wise.com',crypto:'0x... (Red: ERC-20)',plane:'nombre@plane.com',banco:'CLABE o SWIFT + banco',otro:'Descripción'})[p]||'';
+const payProcLabel = p => ({wise:'💳 Wise',crypto:'🪙 Crypto',plane:'✈️ Plane',banco:'🏦 Banco',otro:'📌 Otro'})[p]||'—';
 
 function onPayProcChange() {
   const p = document.getElementById('f-payproc')?.value;
@@ -1111,6 +1111,7 @@ async function openModalCuenta(data={}) {
         <option value="">Sin definir</option>
         <option value="wise" ${data.payment_processor==='wise'?'selected':''}>💳 Wise</option>
         <option value="crypto" ${data.payment_processor==='crypto'?'selected':''}>🪙 Crypto</option>
+        <option value="plane" ${data.payment_processor==='plane'?'selected':''}>✈️ Plane</option>
         <option value="banco" ${data.payment_processor==='banco'?'selected':''}>🏦 Transferencia bancaria</option>
         <option value="otro" ${data.payment_processor==='otro'?'selected':''}>📌 Otro</option>
       </select>
@@ -1176,16 +1177,8 @@ async function saveUpdatePnl(id) {
 // ══════════════════════════════════════
 // MOVIMIENTOS
 // ══════════════════════════════════════
-async function loadMovimientos() {
-  const el = document.getElementById('movimientos-content');
-  el.innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
-  let q = sb.from('trading_events').select('*,trading_accounts(firm,account_size,account_number,is_personal)').order('event_date',{ascending:false});
-  const tipo=document.getElementById('fm-tipo')?.value, cuenta=document.getElementById('fm-cuenta')?.value;
-  if (tipo)   q=q.eq('event_type',tipo);
-  if (cuenta) q=q.eq('account_id',cuenta);
-  const { data } = await q;
-  const evts = (data||[]).filter(e=>!e.trading_accounts?.is_personal);
-  if (!evts.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">📝</div>Sin movimientos.</div>'; return; }
+function movimientosTableHTML(evts) {
+  if (!evts.length) return '<div class="empty-state"><div class="e-icon">📝</div>Sin movimientos.</div>';
   const rows = evts.map(e=>{
     const acc=e.trading_accounts;
     const isIn=e.event_type==='payout';
@@ -1207,9 +1200,21 @@ async function loadMovimientos() {
       <td style="white-space:nowrap">${receiptBtn}${delBtn(`deleteEvento('${e.id}')`)}</td>
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class="table-card"><table>
+  return `<div class="table-card"><table>
     <thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Moneda</th><th>Monto</th><th>Notas</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
+}
+
+async function loadMovimientos() {
+  const el = document.getElementById('movimientos-content');
+  el.innerHTML='<div class="loading-center"><div class="spinner"></div></div>';
+  let q = sb.from('trading_events').select('*,trading_accounts(firm,account_size,account_number,is_personal)').order('event_date',{ascending:false});
+  const tipo=document.getElementById('fm-tipo')?.value, cuenta=document.getElementById('fm-cuenta')?.value;
+  if (tipo)   q=q.eq('event_type',tipo);
+  if (cuenta) q=q.eq('account_id',cuenta);
+  const { data } = await q;
+  const evts = (data||[]).filter(e=>!e.trading_accounts?.is_personal);
+  el.innerHTML = movimientosTableHTML(evts);
 }
 
 async function openModalEvento(preAccountId='') {
@@ -1300,12 +1305,16 @@ async function saveEvento() {
   const { error } = await sb.from('trading_events').insert({ account_id, event_type, amount, event_date, notes:notes||null, currency, exchange_rate:currency==='MXN'?rate:null, amount_usd, receipt_url });
   if (error) { document.getElementById('form-err').innerHTML=`<div class="alert alert-red">${error.message}</div>`; return; }
   if (event_type==='burn') await sb.from('trading_accounts').update({ phase:'burned', burned_date:event_date }).eq('id',account_id);
-  closeModal(); loadMovimientos();
+  closeModal(); refreshMovimientosView();
 }
 async function deleteEvento(id) {
   if (!canDelete()) return;
   if (!confirm('¿Eliminar este movimiento?')) return;
-  await sb.from('trading_events').delete().eq('id',id); loadMovimientos();
+  await sb.from('trading_events').delete().eq('id',id); refreshMovimientosView();
+}
+function refreshMovimientosView() {
+  if (document.getElementById('page-config')?.classList.contains('active')) renderConfigMovimientos(document.getElementById('config-inner'));
+  else loadMovimientos();
 }
 
 // ══════════════════════════════════════
@@ -1728,13 +1737,28 @@ function renderConfigShell(el) {
       <div style="display:flex;gap:6px">
         <button class="btn ${_configView==='dashboard'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('dashboard')">📊 Dashboard</button>
         <button class="btn ${_configView==='cuentas'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('cuentas')">🏦 Cuentas</button>
+        <button class="btn ${_configView==='movimientos'?'btn-blue':'btn-ghost'} btn-sm" onclick="setConfigView('movimientos')">📝 Movimientos</button>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="_configUnlocked=false;loadConfig()">Bloquear</button>
     </div>
     <div id="config-inner"><div class="loading-center"><div class="spinner"></div></div></div>`;
   const inner = document.getElementById('config-inner');
   if (_configView === 'dashboard') renderConfigDashboard(inner);
+  else if (_configView === 'movimientos') renderConfigMovimientos(inner);
   else renderConfigPersonal(inner);
+}
+
+async function renderConfigMovimientos(el) {
+  const { data: accs } = await sb.from('trading_accounts').select('id').eq('is_personal', true);
+  const ids = (accs||[]).map(a=>a.id);
+  if (!ids.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">📝</div>Sin cuentas personales registradas.</div>'; return; }
+  const { data: evts } = await sb.from('trading_events').select('*,trading_accounts(firm,account_size,account_number)')
+    .in('account_id', ids).order('event_date',{ascending:false});
+  el.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="btn btn-blue btn-sm" onclick="openModalEvento()">+ Movimiento</button>
+    </div>
+    ${movimientosTableHTML(evts||[])}`;
 }
 
 function renderConfigLock(el) {
