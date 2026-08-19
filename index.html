@@ -979,12 +979,12 @@ async function accountTableHTML(accs, opts={}) {
     <tbody>${rows}</tbody></table></div>`;
 }
 
-function printWorksheet() {
-  const accs = _lastCuentasAccs;
+function printWorksheet(accsOverride, labelOverride) {
+  const accs = accsOverride || _lastCuentasAccs;
   const container = document.getElementById('print-worksheet');
   if (!accs.length) { alert('No hay cuentas cargadas para imprimir.'); return; }
   const traderSel = document.getElementById('f-trader');
-  const traderLabel = traderSel && traderSel.value ? traderSel.options[traderSel.selectedIndex].text : 'Todos los traders';
+  const traderLabel = labelOverride || (traderSel && traderSel.value ? traderSel.options[traderSel.selectedIndex].text : 'Todos los traders');
   const cards = accs.map(a => {
     const pnl = Number(a.current_pnl||0);
     const tgt = Number(a.profit_target||0);
@@ -1756,11 +1756,18 @@ function tryConfigUnlock() {
   }
 }
 
+let _lastPersonalAccs = [];
 async function renderConfigPersonal(el) {
   const { data: accounts } = await sb.from('trading_accounts').select('*').eq('is_personal', true).order('firm');
   const accs = (accounts||[]).sort(accountSort);
+  _lastPersonalAccs = accs;
   if (!accs.length) { el.innerHTML='<div class="empty-state"><div class="e-icon">🔒</div>Sin cuentas personales registradas.</div>'; return; }
-  el.innerHTML = await accountTableHTML(accs, { showTrader:false, showCost:true });
+  const table = await accountTableHTML(accs, { showTrader:false, showCost:true });
+  el.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="btn btn-ghost" onclick='printWorksheet(_lastPersonalAccs, "Cuentas personales")'>🖨️ Hoja de trabajo (PDF)</button>
+    </div>
+    ${table}`;
 }
 
 async function renderConfigDashboard(el) {
