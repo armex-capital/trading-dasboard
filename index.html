@@ -452,6 +452,22 @@ function renderConsistencyBlock(acc) {
   }
   return html;
 }
+// MLL freeze: TopStep (cualquier tipo) congela al llegar a $2,000 de ganancia acumulada;
+// Lucid evaluación congela a $2,100; Lucid ya fondeada nunca tuvo trailing (fijo desde el fondeo).
+function mllFreezeInfo(a) {
+  if (a.firm === 'Lucid' && a.phase === 'funded') return null;
+  const freezeThreshold = a.firm === 'Lucid' ? 2100 : 2000;
+  const profit = Number(a.current_pnl||0);
+  const falta = Math.max(0, freezeThreshold - profit);
+  return { freezeThreshold, falta, frozen: profit >= freezeThreshold };
+}
+function mllFreezeBlock(a) {
+  const info = mllFreezeInfo(a);
+  if (!info) return '';
+  return info.frozen
+    ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(60,180,100,.14);color:var(--green)">🔒 MLL ya congelado (no sube más)</div>`
+    : `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,150,40,.14);color:var(--orange)">🔓 Faltan <strong>${fmtUSD(info.falta)}</strong> para congelar el MLL (deje de perseguir)</div>`;
+}
 function phaseRank(p) { return {funded:0, evaluation:1, burned:2}[p] ?? 3; }
 function progressPct(acc) {
   if (!acc.profit_target) return 0;
@@ -494,6 +510,7 @@ async function openAccountDetail(acc) {
     <div style="margin-bottom:10px">${phaseBadge(acc.phase)} ${typeBadge(acc.account_type)}</div>
     ${acc.phase==='evaluation' ? progressBar(Number(acc.current_pnl||0),Number(acc.profit_target),Number(acc.max_loss_limit)) : `<div style="font-size:14px;color:${Number(acc.current_pnl)>=0?'var(--green)':'var(--red)'}">P&L: ${Number(acc.current_pnl)>=0?'+':''}${fmtUSD(acc.current_pnl)}</div>`}
     ${renderConsistencyBlock(acc)}
+    ${mllFreezeBlock(acc)}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;font-size:12px">
       <div><span style="color:var(--muted)">Win rate (plataforma)</span><div style="font-weight:600">${typeof acc.win_rate==='number'?acc.win_rate.toFixed(2)+'%':'—'}</div></div>
       <div><span style="color:var(--muted)">Profit factor</span><div style="font-weight:600">${typeof acc.profit_factor==='number'?acc.profit_factor.toFixed(2):'—'}</div></div>
@@ -864,14 +881,20 @@ function accountTableHTML(accs, opts={}) {
         <div class="progress-bar"><div class="progress-fill" style="width:${cobroPct}%;background:${cobroBarColor}"></div></div>
         <span class="progress-label">${fmtN(colchon)}/${fmtN(cobroTarget)}</span>
       </div>` : '';
-    const fundedBlock = `<div style="font-size:12px"><span style="color:var(--green)">✅ Fondeada</span> · P&L: <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>
-      ${cobroBar ? `<div style="font-size:10px;color:var(--muted);margin-top:5px">Meta: colchón $2,000 → retiro $1,000</div>${cobroBar}` : ''}
-      ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
-      ${faltaCobro!==null ? (faltaCobro>0
-        ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,140,220,.12);color:var(--blue)">💰 Faltan <strong>${fmtUSD(faltaCobro)}</strong> de colchón para poder retirar ~$1,000 (50%)</div>`
-        : `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,180,100,.14);color:var(--green)">💰 Ya puedes retirar ~${fmtUSD(retirableAhora)} (50% del colchón)</div>`
-      ) : ''}`;
-    const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consistencyInline(a)
+    const isLucidFunded = a.firm==='Lucid' && a.phase==='funded';
+    const fundedHeader = `<div style="font-size:12px"><span style="color:var(--green)">✅ Fondeada</span> · P&L: <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>`;
+    const fundedBlock = isLucidFunded
+      ? `${fundedHeader}
+        ${cobroBar ? `<div style="font-size:10px;color:var(--muted);margin-top:5px">Meta: colchón $2,000 → retiro $1,000</div>${cobroBar}` : ''}
+        ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
+        ${faltaCobro!==null ? (faltaCobro>0
+          ? `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,140,220,.12);color:var(--blue)">💰 Faltan <strong>${fmtUSD(faltaCobro)}</strong> de colchón para poder retirar ~$1,000 (50%)</div>`
+          : `<div style="font-size:11px;margin-top:3px;padding:4px 8px;border-radius:5px;background:rgba(60,180,100,.14);color:var(--green)">💰 Ya puedes retirar ~${fmtUSD(retirableAhora)} (50% del colchón)</div>`
+        ) : ''}`
+      : `${fundedHeader}
+        ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
+        ${mllFreezeBlock(a)}`;
+    const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consistencyInline(a)+mllFreezeBlock(a)
                : a.phase==='funded'     ? fundedBlock
                :                          '<span style="color:var(--red)">🔥 Quemada</span>';
     const costoCell = a.cost_mxn
