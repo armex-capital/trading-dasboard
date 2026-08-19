@@ -870,7 +870,8 @@ async function loadCuentas() {
 
 async function accountTableHTML(accs, opts={}) {
   // Regla Lucid: 5 días separados con mínimo $150 de ganancia cada uno para calificar a payout.
-  const fundedIds = accs.filter(a=>a.firm==='Lucid' && a.phase==='funded').map(a=>a.id);
+  // Regla TopStep Ruta Standard (TOPSTEP_50K_REGLAS.md): igual que Lucid, 5 días de $150+ no consecutivos.
+  const fundedIds = accs.filter(a=>a.phase==='funded').map(a=>a.id);
   const payoutDaysMap = {};
   if (fundedIds.length) {
     const { data: evts } = await sb.from('trading_events').select('account_id,amount,event_date')
@@ -896,7 +897,7 @@ async function accountTableHTML(accs, opts={}) {
     const payoutDaysCount = payoutDaysMap[a.id] ? payoutDaysMap[a.id].size : 0;
     const payoutDaysTarget = 5;
     const payoutDaysPct = Math.min(100, (payoutDaysCount/payoutDaysTarget)*100);
-    const payoutDaysBlock = isLucidFunded ? `
+    const payoutDaysBlock = `
         <div style="font-size:10px;color:var(--muted);margin-top:8px">Días de payout ($150+ netos, separados) — meta 5</div>
         <div class="progress-wrap">
           <div class="progress-bar"><div class="progress-fill" style="width:${payoutDaysPct}%;background:${payoutDaysCount>=payoutDaysTarget?'var(--green)':'var(--purple)'}"></div></div>
@@ -905,7 +906,7 @@ async function accountTableHTML(accs, opts={}) {
         ${payoutDaysCount>=payoutDaysTarget
           ? `<div style="font-size:11px;margin-top:3px;color:var(--green)">✅ Días mínimos completos</div>`
           : `<div style="font-size:11px;margin-top:3px;color:var(--purple)">Faltan <strong>${payoutDaysTarget-payoutDaysCount}</strong> día(s) de $150+</div>`
-        }` : '';
+        }`;
     const fundedHeader = `<div style="font-size:12px"><span style="color:var(--green)">✅ Fondeada</span> · P&L: <span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${fmtUSD(pnl)}</span></div>`;
     const fundedBlock = isLucidFunded
       ? `${fundedHeader}
@@ -918,7 +919,8 @@ async function accountTableHTML(accs, opts={}) {
         ${payoutDaysBlock}`
       : `${fundedHeader}
         ${colchon!==null ? `<div style="font-size:11px;margin-top:4px;padding:4px 8px;border-radius:5px;background:rgba(220,60,60,.12);color:var(--red)">📉 Colchón hasta MLL: <strong>${fmtUSD(colchon)}</strong></div>` : ''}
-        ${mllFreezeBlock(a)}`;
+        ${mllFreezeBlock(a)}
+        ${payoutDaysBlock}`;
     const prog = a.phase==='evaluation' ? progressBar(pnl,tgt,mll)+consistencyInline(a)+mllFreezeBlock(a)
                : a.phase==='funded'     ? fundedBlock
                :                          '<span style="color:var(--red)">🔥 Quemada</span>';
